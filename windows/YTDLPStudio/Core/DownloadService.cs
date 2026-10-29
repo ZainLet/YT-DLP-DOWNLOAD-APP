@@ -38,7 +38,11 @@ public sealed class DownloadService
             {
                 lock (callbackLock)
                 {
-                    if (line.StartsWith("STUDIO_FILE:", StringComparison.Ordinal)) finalPath = line[12..];
+                    if (line.StartsWith("STUDIO_FILE:", StringComparison.Ordinal))
+                    {
+                        try { finalPath = JsonSerializer.Deserialize<string>(line[12..]) ?? ""; }
+                        catch (JsonException) { lastError = "O yt-dlp informou um caminho final inválido."; }
+                    }
                     if (DownloadOutputParser.Parse(line) is { } update)
                     {
                         if (update.Title is not null) title = update.Title;

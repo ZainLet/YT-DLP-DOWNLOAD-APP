@@ -194,7 +194,7 @@ internal static class Program
         var path = Path.Combine(Environment.CurrentDirectory, "vídeo espaço.mp4");
         if (mode == "download-ok") File.WriteAllText(path, "fixture");
         if (mode == "download-missing") path += ".missing";
-        Console.WriteLine("STUDIO_FILE:" + path); return 0;
+        Console.WriteLine("STUDIO_FILE:" + JsonSerializer.Serialize(path)); return 0;
     }
     private static async Task<(int Code, string Output)> RunTool(string executable, params string[] args)
     {
