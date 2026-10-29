@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "downloads": [
+    {"name":"yt-dlp.exe","url":"https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe","sha256":"f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d","kind":"tool"},
+    {"name":"deno-windows-x64.zip","url":"https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip","sha256":"cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf","kind":"deno"},
+    {"name":"ffmpeg-8.0.1.tar.xz","url":"https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz","sha256":"05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41","kind":"source"},
+    {"name":"lame-3.100.tar.gz","url":"https://download.videolan.org/pub/pub/contrib/lame/lame-3.100.tar.gz","sha256":"ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e","kind":"source"},
+    {"name":"libogg-1.3.6.tar.gz","url":"https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz","sha256":"83e6704730683d004d20e21b8f7f55dcb3383cdf84c0daedf30bde175f774638","kind":"source"},
+    {"name":"libvorbis-1.3.7.tar.gz","url":"https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz","sha256":"0e982409a9c3fc82ee06e08205b1355e5c6aa4c36bca58146ef399621b0ce5ab","kind":"source"},
+    {"name":"opus-1.6.1.tar.gz","url":"https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz","sha256":"6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1","kind":"source"},
+    {"name":"yt-dlp-2026.10.26.tar.gz","url":"https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.tar.gz","sha256":"21f942d258d25cc4e60b4982a25c423460f0bebb835f38e6dfd1fcb140087f95","kind":"source"},
+    {"name":"yt-dlp-LICENSE.txt","url":"https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE","sha256":"7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c","kind":"notice"},
+    {"name":"yt-dlp-THIRD_PARTY_LICENSES.txt","url":"https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt","sha256":"472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7","kind":"notice"},
+    {"name":"Deno-LICENSE.txt","url":"https://raw.githubusercontent.com/denoland/deno/v2.9.8/LICENSE.md","sha256":"f62497fffecc0852960c8d3e6934b9db86d16396e9b604072e923892cae3a588","kind":"notice"},
+    {"name":"Deno-Node-LICENSE.txt","url":"https://raw.githubusercontent.com/denoland/deno/v2.9.8/cli/tsc/dts/node/LICENSE","sha256":"c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383","kind":"notice"},
+    {"name":"Deno-V8-LICENSE.txt","url":"https://raw.githubusercontent.com/v8/v8/15.0.245.2/LICENSE","sha256":"6ab33af8774a0f396ee3aeeb761e3229057682d6f9fa7f572e390c2cb3a6e509","kind":"notice"},
+    {"name":"Deno-TypeScript-LICENSE.txt","url":"https://raw.githubusercontent.com/microsoft/TypeScript/v6.0.3/LICENSE.txt","sha256":"a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47","kind":"notice"},
+    {"name":"innosetup-6.5.4.exe","url":"https://github.com/jrsoftware/issrc/releases/download/is-6_5_4/innosetup-6.5.4.exe","sha256":"fa73bf47a4da250d185d07561c2bfda387e5e20db77e4570004cf6a133cc10b1","kind":"build-tool"}
+  ]
+}

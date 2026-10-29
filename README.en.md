@@ -3,7 +3,7 @@
   <h1>YTDLP Studio</h1>
   <p>Videos and music, from a link to your Mac.</p>
   <p><a href="README.md">Português</a> · <strong>English</strong></p>
-  <p><a href="https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases/latest">Download for macOS</a> · <a href="#installation">Installation</a> · <a href="#building-from-source">Build from source</a></p>
+  <p><a href="https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases/latest">Download for macOS</a> · <a href="https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases">Windows beta</a> · <a href="#installation">Installation</a> · <a href="#building-from-source">Build from source</a></p>
 </div>
 
 A native macOS app built with SwiftUI and AppKit. It organizes batch [yt-dlp](https://github.com/yt-dlp/yt-dlp) downloads in a dark, translucent window with native blur and Liquid Glass controls.
@@ -30,6 +30,10 @@ The installer includes **yt-dlp, FFmpeg, FFprobe and Deno**. The distributed app
 | Storage | App, bundled tools, and free space for downloaded files |
 
 The distributed binary is **arm64**. An Intel build is not included in this release. The runtime was validated on macOS 27.2; the minimum build target is macOS 14.
+
+### Windows beta
+
+A native beta for **Windows 10 version 22H2 (build 19045) and Windows 11 x64** is available from the [releases page](https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases). The installer includes the app and its required tools; a portable build is also available. Please test this beta on a Windows computer before relying on it. See the release notes for installation instructions and limitations.
 
 ## Features
 

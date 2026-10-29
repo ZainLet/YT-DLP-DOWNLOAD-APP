@@ -1,0 +1,73 @@
+<Window x:Class="YTDLPStudio.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="YTDLP Studio · Windows Beta" Width="1080" Height="830" MinWidth="820" MinHeight="600" WindowStartupLocation="CenterScreen" Icon="Assets/AppIcon.png" Background="Transparent">
+  <Border x:Name="BackdropTint" Background="{DynamicResource CanvasBrush}">
+    <DockPanel LastChildFill="True">
+      <Grid DockPanel.Dock="Top" Margin="32,20,32,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Source="Assets/AppIcon.png" Width="30" Height="30" Margin="0,0,9,0" /><TextBlock Text="YTDLP Studio" FontWeight="SemiBold" VerticalAlignment="Center" /></StackPanel>
+        <Border Grid.Column="1" Background="#0CFFFFFF" CornerRadius="13" Padding="3" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"><StackPanel Orientation="Horizontal">
+          <RadioButton x:Name="DownloadTab" Content="Baixar" GroupName="Navigation" IsChecked="True" Checked="Navigate" Tag="0" AutomationProperties.Name="Baixar" />
+          <RadioButton x:Name="ActivityTab" Content="Atividade" GroupName="Navigation" Checked="Navigate" Tag="1" AutomationProperties.Name="Atividade" />
+          <RadioButton x:Name="CompletedTab" Content="Concluídos" GroupName="Navigation" Checked="Navigate" Tag="2" AutomationProperties.Name="Concluídos" />
+        </StackPanel></Border>
+        <Border Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#16276DDA" BorderBrush="#484D8FEA" BorderThickness="1" CornerRadius="8" Padding="9,5"><TextBlock Text="WINDOWS BETA" Foreground="{DynamicResource FocusBrush}" FontSize="10" FontWeight="SemiBold" /></Border>
+      </Grid>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,26,32,28" CanContentScroll="False">
+        <StackPanel MaxWidth="1140">
+          <StackPanel x:Name="DownloadPage">
+            <TextBlock Text="Tudo pronto para baixar." FontSize="30" FontWeight="SemiBold" />
+            <TextBlock Text="Vídeos e músicas, do link para o seu PC." Style="{StaticResource Muted}" Margin="0,7,0,26" />
+            <Grid x:Name="ComposerGrid" SizeChanged="ComposerSizeChanged">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="20" /><ColumnDefinition Width="302" /></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+              <Border x:Name="LinksPanel" Style="{StaticResource Panel}" VerticalAlignment="Top">
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,17"><TextBlock DockPanel.Dock="Right" Text="{Binding LinkCountLabel}" Style="{StaticResource Muted}" FontSize="12" /><TextBlock Text="Seus links" FontSize="15" FontWeight="SemiBold" /></DockPanel>
+                  <Grid>
+                    <TextBox x:Name="LinksBox" Text="{Binding Links, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Height="218" TextWrapping="Wrap" Padding="16" FontSize="14" AutomationProperties.Name="Links para baixar, um por linha" />
+                    <StackPanel Margin="17,17,17,0" IsHitTestVisible="False" Visibility="{Binding PlaceholderVisibility}"><TextBlock Text="Cole os links aqui" FontSize="15" Foreground="{DynamicResource MutedBrush}" /><TextBlock Text="https://youtube.com/watch?v=…" Style="{StaticResource Muted}" FontSize="12" Margin="0,9,0,0" /></StackPanel>
+                  </Grid>
+                  <TextBlock Text="{Binding ValidationError}" Foreground="{DynamicResource ErrorBrush}" FontSize="12" Margin="0,10,0,0" />
+                  <DockPanel Margin="0,10,0,18"><Button DockPanel.Dock="Right" Content="Formatos do link…" Style="{StaticResource LinkButton}" Click="ShowFormats" IsEnabled="{Binding CanProbe}" ToolTip="Consultar formatos, resoluções e codecs reais do primeiro link" /><Button Content="Colar links" HorizontalAlignment="Left" Click="PasteLinks" /></DockPanel>
+                  <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,17,0,0"><TextBlock Text="Adicione vários links de uma vez. A fila cuida do resto." Style="{StaticResource Muted}" FontSize="12" /></Border>
+                </StackPanel>
+              </Border>
+              <Border x:Name="OptionsPanel" Grid.Column="2" Style="{StaticResource Panel}" VerticalAlignment="Top">
+                <StackPanel>
+                  <TextBlock Text="Como salvar" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,17" />
+                  <Border Background="#0CFFFFFF" CornerRadius="12" Padding="3"><UniformGrid Columns="2"><RadioButton x:Name="VideoKind" GroupName="Kind" Content="Vídeo" IsChecked="True" Checked="KindChanged" /><RadioButton x:Name="AudioKind" GroupName="Kind" Content="Áudio" Checked="KindChanged" /></UniformGrid></Border>
+                  <TextBlock Text="Formato" Style="{StaticResource FieldLabel}" /><ComboBox ItemsSource="{Binding Containers}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Container}" AutomationProperties.Name="Formato de saída" />
+                  <StackPanel Visibility="{Binding VideoVisibility}"><TextBlock Text="Resolução máxima" Style="{StaticResource FieldLabel}" /><ComboBox ItemsSource="{Binding Resolutions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Resolution}" AutomationProperties.Name="Resolução máxima" /></StackPanel>
+                  <StackPanel Visibility="{Binding AudioVisibility}"><TextBlock Text="Qualidade de conversão" Style="{StaticResource FieldLabel}" /><ComboBox ItemsSource="{Binding AudioQualities}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AudioQuality}" AutomationProperties.Name="Qualidade de áudio" /></StackPanel>
+                  <Expander x:Name="AdvancedOptions" Header="Codecs e opções avançadas" Margin="0,18,0,0">
+                    <StackPanel Margin="0,4,0,0">
+                      <StackPanel Visibility="{Binding VideoVisibility}"><TextBlock Text="Codec de vídeo da fonte" Style="{StaticResource FieldLabel}" /><ComboBox ItemsSource="{Binding VideoCodecs}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding VideoCodec}" AutomationProperties.Name="Codec de vídeo da fonte" /><TextBlock Text="Quadros por segundo" Style="{StaticResource FieldLabel}" /><ComboBox ItemsSource="{Binding FrameRates}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Fps}" AutomationProperties.Name="FPS máximo" /></StackPanel>
+                      <TextBlock Text="Codec de áudio da fonte" Style="{StaticResource FieldLabel}" /><ComboBox ItemsSource="{Binding AudioCodecs}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AudioCodec}" AutomationProperties.Name="Codec de áudio da fonte" />
+                      <TextBlock Text="Seletor yt-dlp (opcional)" Style="{StaticResource FieldLabel}" /><TextBox Text="{Binding Selector, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" FontSize="12" AutomationProperties.Name="Seletor manual yt-dlp" ToolTip="Ex.: 137+140 ou bv+ba/b. Substitui os filtros de resolução, FPS e codecs." />
+                      <TextBlock Text="Codecs filtram a fonte. O vídeo é remuxado sem recodificar; áudio pode ser convertido. O seletor manual substitui os filtros." Style="{StaticResource Muted}" FontSize="11" Margin="0,10,0,0" />
+                    </StackPanel>
+                  </Expander>
+                  <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Margin="0,18,0,0" Padding="0,10,0,0"><StackPanel><DockPanel><Button DockPanel.Dock="Right" Content="Alterar…" Style="{StaticResource LinkButton}" Click="ChooseDirectory" /><TextBlock Text="Destino" Style="{StaticResource Muted}" FontSize="12" VerticalAlignment="Center" /></DockPanel><TextBox Text="{Binding Directory, UpdateSourceTrigger=PropertyChanged}" FontSize="12" AutomationProperties.Name="Pasta de destino" ToolTip="{Binding Directory}" /></StackPanel></Border>
+                  <Button Content="{Binding DownloadButtonLabel}" Style="{StaticResource PrimaryButton}" Margin="0,18,0,0" IsEnabled="{Binding CanAdd}" Click="AddDownloads" ToolTip="Ctrl+Enter" />
+                </StackPanel>
+              </Border>
+            </Grid>
+            <DockPanel Margin="0,26,0,12"><Button DockPanel.Dock="Right" Content="Ver tudo →" Style="{StaticResource LinkButton}" Click="ViewActivity" /><TextBlock Text="Última atividade" FontWeight="SemiBold" VerticalAlignment="Center" /></DockPanel>
+            <Border x:Name="RecentEmpty" Background="#08FFFFFF" CornerRadius="16" Padding="20"><DockPanel><TextBlock DockPanel.Dock="Right" Text="Até 2 simultâneos" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="18,0,0,0" /><StackPanel><TextBlock Text="Sua fila começa aqui" FontWeight="SemiBold" /><TextBlock Text="Os próximos downloads aparecem neste espaço." Style="{StaticResource Muted}" FontSize="12" Margin="0,5,0,0" /></StackPanel></DockPanel></Border>
+            <ItemsControl ItemsSource="{Binding RecentJobs}" ItemTemplate="{DynamicResource JobTemplate}" />
+          </StackPanel>
+          <StackPanel x:Name="ActivityPage" Visibility="Collapsed">
+            <TextBlock Text="Cada download, no seu tempo." FontSize="30" FontWeight="SemiBold" /><TextBlock Text="Acompanhe o progresso e o que vem a seguir." Style="{StaticResource Muted}" Margin="0,7,0,25" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,24"><StackPanel Margin="0,0,40,0"><TextBlock Text="{Binding ActiveCount}" FontSize="26" FontWeight="SemiBold" Foreground="{DynamicResource FocusBrush}" /><TextBlock Text="Baixando" Style="{StaticResource Muted}" FontSize="12" /></StackPanel><StackPanel Margin="0,0,40,0"><TextBlock Text="{Binding QueuedCount}" FontSize="26" FontWeight="SemiBold" /><TextBlock Text="Na fila" Style="{StaticResource Muted}" FontSize="12" /></StackPanel><StackPanel><TextBlock Text="{Binding DoneCount}" FontSize="26" FontWeight="SemiBold" /><TextBlock Text="Concluídos" Style="{StaticResource Muted}" FontSize="12" /></StackPanel></StackPanel>
+            <ComboBox Width="240" HorizontalAlignment="Left" ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}" Margin="0,0,0,20" AutomationProperties.Name="Filtrar atividade" />
+            <ItemsControl ItemsSource="{Binding ActivityJobs}" ItemTemplate="{DynamicResource JobTemplate}" />
+            <StackPanel x:Name="ActivityEmpty" Margin="0,46"><TextBlock Text="Tudo em dia" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" /><TextBlock Text="Adicione novos links para começar sua próxima fila." Style="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,20" /><Button Content="Adicionar links" HorizontalAlignment="Center" Click="NewDownload" /></StackPanel>
+          </StackPanel>
+          <StackPanel x:Name="CompletedPage" Visibility="Collapsed"><TextBlock Text="Prontos para dar play." FontSize="30" FontWeight="SemiBold" /><TextBlock Text="Seus downloads finalizados, reunidos em um lugar." Style="{StaticResource Muted}" Margin="0,7,0,25" /><ItemsControl ItemsSource="{Binding CompletedJobs}" ItemTemplate="{DynamicResource JobTemplate}" /><StackPanel x:Name="CompletedEmpty" Margin="0,46"><TextBlock Text="Sua coleção começa aqui" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" /><TextBlock Text="Quando um download terminar, você vai encontrá-lo aqui." Style="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,20" /><Button Content="Adicionar links" HorizontalAlignment="Center" Click="NewDownload" /></StackPanel></StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+  <Window.Resources>
+    <DataTemplate x:Key="JobTemplate"><Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="16" Padding="20" Margin="0,0,0,10"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding Url}" /><TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" FontSize="12" Margin="0,6,0,10" /><ProgressBar Value="{Binding Progress}" Maximum="100" AutomationProperties.Name="Progresso do download" Visibility="{Binding ProgressVisibility}" /><TextBlock Text="{Binding Error}" Foreground="{DynamicResource ErrorBrush}" FontSize="12" Margin="0,6,0,0" /><TextBlock Text="{Binding File}" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" /></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0"><Button Content="Cancelar" Click="CancelJob" Visibility="{Binding CancelVisibility}" /><Button Content="Tentar novamente" Click="RetryJob" Visibility="{Binding RetryVisibility}" /><Button Content="Mostrar na pasta" Click="RevealJob" Visibility="{Binding RevealVisibility}" /></StackPanel></Grid></Border></DataTemplate>
+  </Window.Resources>
+</Window>

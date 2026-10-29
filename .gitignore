@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 .AppIcon.iconset
 *.xcuserstate
+**/bin/
+**/obj/
+.vs/
