@@ -7,10 +7,12 @@ every downloaded executable, license, build tool and source archive.
 1. Build the WPF app self-contained for `win-x64`.
 2. Run `scripts/windows/prepare-runtime.ps1` to download and verify the locked
    yt-dlp, Deno, licenses and source archives.
-3. Install `mingw-w64-x86_64-toolchain`, `make`, and `pkgconf` into an MSYS2
-   MINGW64 environment. Run `scripts/windows/build-ffmpeg.sh` from that shell.
-   It builds LAME and FFmpeg from the supplied versioned sources, with static
-   linking and without GPL, version 3 or nonfree components. It also checks the
+3. Install `mingw-w64-x86_64-toolchain`, `make`, `pkgconf`, `xz`, and
+   `diffutils` into an MSYS2 MINGW64 environment. Run
+   `scripts/windows/build-ffmpeg.sh` from that shell.
+   It builds LAME, Ogg, Vorbis, Opus and FFmpeg from the supplied versioned
+   sources, with static linking and without GPL, version 3 or nonfree
+   components. It also checks the
    resulting PE imports against Windows system libraries and records the
    configure command and build logs.
 4. `scripts/windows/package.ps1` verifies the standalone .NET runtime, bundled

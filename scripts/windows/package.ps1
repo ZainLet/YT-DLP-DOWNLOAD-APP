@@ -10,7 +10,7 @@ $dist = Join-Path $BuildDir 'dist'
 $evidence = Join-Path $BuildDir 'evidence'
 $thirdParty = Join-Path $PublishDir 'ThirdParty'
 New-Item -ItemType Directory -Force $dist, $evidence, $thirdParty | Out-Null
-foreach ($file in @('YTDLPStudio.exe', 'YTDLPStudio.runtimeconfig.json', 'coreclr.dll', 'hostfxr.dll', 'PresentationFramework.dll', 'tools/ffmpeg.exe', 'tools/ffprobe.exe', 'tools/yt-dlp.exe', 'tools/deno.exe', 'THIRD_PARTY_NOTICES.md', 'ThirdParty/FFmpeg-LGPL-2.1.txt', 'ThirdParty/LAME-LICENSE.txt')) {
+foreach ($file in @('YTDLPStudio.exe', 'YTDLPStudio.runtimeconfig.json', 'coreclr.dll', 'hostfxr.dll', 'PresentationFramework.dll', 'tools/ffmpeg.exe', 'tools/ffprobe.exe', 'tools/yt-dlp.exe', 'tools/deno.exe', 'THIRD_PARTY_NOTICES.md', 'ThirdParty/FFmpeg-LGPL-2.1.txt', 'ThirdParty/LAME-LICENSE.txt', 'ThirdParty/Ogg-LICENSE.txt', 'ThirdParty/Vorbis-LICENSE.txt', 'ThirdParty/Opus-LICENSE.txt')) {
     if (!(Test-Path (Join-Path $PublishDir $file))) { throw "Incomplete self-contained publish: $file" }
 }
 $config = Get-Content "$PublishDir/YTDLPStudio.runtimeconfig.json" -Raw | ConvertFrom-Json

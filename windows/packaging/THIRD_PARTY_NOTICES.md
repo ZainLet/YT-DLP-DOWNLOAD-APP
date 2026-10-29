@@ -11,6 +11,9 @@ are provided in the release's `ThirdPartySources.zip`.
 | Deno JavaScript runtime | 2.9.8 | MIT and upstream V8/Node/TypeScript notices; [release and sources](https://github.com/denoland/deno/releases/tag/v2.9.8) |
 | FFmpeg and FFprobe | 8.0.1 | LGPL 2.1 or later, statically built without GPL, version 3, or nonfree options; matching source archives and build configuration supplied |
 | LAME | 3.100 | LGPL; matching source archive supplied |
+| libogg | 1.3.6 | BSD-style license; matching source archive supplied |
+| libvorbis | 1.3.7 | BSD-style license; matching source archive supplied |
+| Opus | 1.6.1 | BSD-style license; matching source archive supplied |
 | .NET 10 | runtime included | MIT and third-party notices; complete licenses included in `ThirdParty/dotnet/` |
 
 The corresponding matching source archives, build script, dependency hash lock,

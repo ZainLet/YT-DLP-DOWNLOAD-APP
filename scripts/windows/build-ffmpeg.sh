@@ -13,16 +13,21 @@ mkdir -p "$BASE/ffmpeg-work" "$PREFIX" "$BASE/evidence" "$BASE/publish/tools" "$
 python - "$ROOT/windows/packaging/dependencies.lock.json" "$BASE/downloads" <<'PY'
 import hashlib,json,pathlib,sys
 for item in json.load(open(sys.argv[1]))['downloads']:
-    if item['name'].startswith(('ffmpeg-', 'lame-')):
+    if item['name'].startswith(('ffmpeg-', 'lame-', 'libogg-', 'libvorbis-', 'opus-')):
         p=pathlib.Path(sys.argv[2])/item['name']
         if hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()!=item['sha256']:
             raise SystemExit('Source hash mismatch: '+str(p))
 PY
 # Always rebuild from pristine inputs; never trust a stale .done marker.
-rm -rf "$BASE/ffmpeg-work/ffmpeg-8.0.1" "$BASE/ffmpeg-work/lame-3.100" "$PREFIX"
+rm -rf "$BASE/ffmpeg-work/ffmpeg-8.0.1" "$BASE/ffmpeg-work/lame-3.100" \
+    "$BASE/ffmpeg-work/libogg-1.3.6" "$BASE/ffmpeg-work/libvorbis-1.3.7" \
+    "$BASE/ffmpeg-work/opus-1.6.1" "$PREFIX"
 mkdir -p "$PREFIX"
 tar -xf "$BASE/downloads/ffmpeg-8.0.1.tar.xz" -C "$BASE/ffmpeg-work"
 tar -xf "$BASE/downloads/lame-3.100.tar.gz" -C "$BASE/ffmpeg-work"
+tar -xf "$BASE/downloads/libogg-1.3.6.tar.gz" -C "$BASE/ffmpeg-work"
+tar -xf "$BASE/downloads/libvorbis-1.3.7.tar.gz" -C "$BASE/ffmpeg-work"
+tar -xf "$BASE/downloads/opus-1.6.1.tar.gz" -C "$BASE/ffmpeg-work"
 pacman -Q > "$BASE/evidence/msys2-packages.txt"
 gcc --version > "$BASE/evidence/gcc-version.txt"
 JOBS="${STUDIO_BUILD_JOBS:-$(nproc)}"
@@ -33,11 +38,30 @@ JOBS="${STUDIO_BUILD_JOBS:-$(nproc)}"
     make install
 ) 2>&1 | tee "$BASE/evidence/lame-build.log"
 (
+    cd "$BASE/ffmpeg-work/libogg-1.3.6"
+    ./configure --prefix="$PREFIX" --host=x86_64-w64-mingw32 --enable-static --disable-shared
+    make -j "$JOBS"
+    make install
+) 2>&1 | tee "$BASE/evidence/libogg-build.log"
+(
+    cd "$BASE/ffmpeg-work/opus-1.6.1"
+    ./configure --prefix="$PREFIX" --host=x86_64-w64-mingw32 --enable-static --disable-shared --disable-doc --disable-extra-programs --disable-asm
+    make -j "$JOBS"
+    make install
+) 2>&1 | tee "$BASE/evidence/opus-build.log"
+(
+    cd "$BASE/ffmpeg-work/libvorbis-1.3.7"
+    CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib" PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
+        ./configure --prefix="$PREFIX" --host=x86_64-w64-mingw32 --enable-static --disable-shared --disable-oggtest --disable-examples
+    make -j "$JOBS"
+    make install
+) 2>&1 | tee "$BASE/evidence/libvorbis-build.log"
+(
     cd "$BASE/ffmpeg-work/ffmpeg-8.0.1"
     ./configure --prefix="$PREFIX" --target-os=mingw32 --arch=x86_64 --cc=gcc \
         --enable-static --disable-shared --disable-autodetect --disable-gpl --disable-nonfree \
         --disable-version3 --disable-doc --disable-debug --disable-ffplay --disable-x86asm \
-        --disable-pthreads --enable-w32threads --enable-libmp3lame --enable-schannel \
+        --disable-pthreads --enable-w32threads --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-schannel \
         --pkg-config-flags=--static --extra-cflags="-I$PREFIX/include" \
         --extra-ldflags="-L$PREFIX/lib -static -static-libgcc"
     make -j "$JOBS"
@@ -59,6 +83,9 @@ NOTICES="$BASE/publish/ThirdParty"
 cp "$BASE/ffmpeg-work/ffmpeg-8.0.1/COPYING.LGPLv2.1" "$NOTICES/FFmpeg-LGPL-2.1.txt"
 cp "$BASE/ffmpeg-work/ffmpeg-8.0.1/LICENSE.md" "$NOTICES/FFmpeg-LICENSE.txt"
 cp "$BASE/ffmpeg-work/lame-3.100/COPYING" "$NOTICES/LAME-LICENSE.txt"
+cp "$BASE/ffmpeg-work/libogg-1.3.6/COPYING" "$NOTICES/Ogg-LICENSE.txt"
+cp "$BASE/ffmpeg-work/libvorbis-1.3.7/COPYING" "$NOTICES/Vorbis-LICENSE.txt"
+cp "$BASE/ffmpeg-work/opus-1.6.1/COPYING" "$NOTICES/Opus-LICENSE.txt"
 "$BASE/publish/tools/ffmpeg.exe" -buildconf > "$NOTICES/FFmpeg-BUILD-CONFIG.txt" 2>&1 || {
     cat "$NOTICES/FFmpeg-BUILD-CONFIG.txt" >&2
     echo 'Could not inspect the FFmpeg build configuration.' >&2
