@@ -153,6 +153,7 @@ public sealed class DownloadService
         var args = DownloadCommand.CommonArguments(ToolDirectory);
         args.AddRange(new[] { "--dump-single-json", "--skip-download", "--no-warnings", "--socket-timeout", "15", "--", url });
         var run = await ExecuteAsync(DownloadCommand.StartInfo(Tool("yt-dlp"), args, ToolDirectory), null, true, token).ConfigureAwait(false);
+        if (token.IsCancellationRequested && run.ExitCode != 0) throw new OperationCanceledException(token);
         if (run.ExitCode != 0) throw Failure("Não foi possível consultar os formatos. Verifique o link e tente novamente.", run);
         if (run.OutputOverflow) throw Failure("A lista de formatos excedeu o limite de 16 MiB.", run);
         try
