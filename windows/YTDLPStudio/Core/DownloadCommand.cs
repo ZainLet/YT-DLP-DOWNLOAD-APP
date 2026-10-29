@@ -62,7 +62,7 @@ public static class DownloadCommand
         var args = CommonArguments(toolDirectory ?? Path.Combine(AppContext.BaseDirectory, "tools"));
         args.AddRange(new[] { "--newline", "--no-overwrites", "--progress", "--progress-template", "download:STUDIO_PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s", "--print", "before_dl:STUDIO_TITLE:%(title)s", "--print", "after_move:STUDIO_FILE:%(filepath)j", "--no-simulate", "-o", "%(title).180s [%(id)s].%(ext)s", "-f", selector });
         if (options.Kind == MediaKind.Audio)
-            args.AddRange(new[] { "-x", "--audio-format", options.Container is "aiff" or "mka" or "ogg" ? "best" : options.Container, "--audio-quality", options.AudioQuality });
+            args.AddRange(new[] { "-x", "--audio-format", options.Container is "aiff" or "mka" or "ogg" or "alac" ? "best" : options.Container, "--audio-quality", options.AudioQuality });
         else if (options.Container != "auto") args.AddRange(new[] { "--remux-video", options.Container });
         args.AddRange(new[] { "--", url }); return args.AsReadOnly();
     }

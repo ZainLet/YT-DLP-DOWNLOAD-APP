@@ -56,7 +56,7 @@ public sealed class DownloadService
             if (string.IsNullOrWhiteSpace(finalPath)) throw Failure("O processo terminou sem informar o arquivo final.", run);
             finalPath = Path.GetFullPath(finalPath, directory);
             if (!File.Exists(finalPath)) throw Failure("O arquivo final não foi encontrado: " + finalPath, run);
-            if (options.Kind == MediaKind.Audio && options.Container is "aiff" or "mka" or "ogg")
+            if (options.Kind == MediaKind.Audio && options.Container is "aiff" or "mka" or "ogg" or "alac")
             {
                 Notify(new(Status: "Finalizando"));
                 finalPath = await ConvertExtraAudioAsync(finalPath, options, token).ConfigureAwait(false);
@@ -76,13 +76,15 @@ public sealed class DownloadService
     }
     private async Task<string> ConvertExtraAudioAsync(string source, DownloadOptions options, CancellationToken token)
     {
-        var destination = Path.ChangeExtension(source, options.Container);
+        var outputExtension = options.Container == "alac" ? "m4a" : options.Container;
+        var destination = Path.ChangeExtension(source, outputExtension);
         // Always use a unique intermediate file; never truncate a source or an existing user file.
-        var temporary = Path.Combine(Path.GetDirectoryName(source)!, ".studio-" + Guid.NewGuid().ToString("N") + "." + options.Container);
+        var temporary = Path.Combine(Path.GetDirectoryName(source)!, ".studio-" + Guid.NewGuid().ToString("N") + "." + outputExtension);
         var args = new List<string> { "-nostdin", "-hide_banner", "-n", "-i", source, "-map", "0:a:0", "-vn" };
         args.AddRange(options.Container switch
         {
             "aiff" => new[] { "-c:a", "pcm_s16be" },
+            "alac" => new[] { "-c:a", "alac" },
             "mka" => new[] { "-c:a", "copy" },
             "ogg" => DownloadCommand.IsBitrate(options.AudioQuality)
                 ? new[] { "-c:a", "libvorbis", "-b:a", options.AudioQuality }

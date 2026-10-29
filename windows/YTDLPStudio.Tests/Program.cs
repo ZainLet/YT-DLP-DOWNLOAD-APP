@@ -64,6 +64,7 @@ internal static class Program
         {
             var args = DownloadCommand.Arguments("https://example.test/video", options with { Kind = MediaKind.Audio, Container = container }, evidence);
             Assert(args.Contains("-x") && args.Contains("--audio-format"), "audio " + container);
+            if (container is "aiff" or "mka" or "ogg" or "alac") Assert(args[args.IndexOf("--audio-format") + 1] == "best", "native conversion path " + container);
         }
         foreach (var video in DownloadCommand.VideoCodecs)
         foreach (var audio in DownloadCommand.AudioCodecs)
