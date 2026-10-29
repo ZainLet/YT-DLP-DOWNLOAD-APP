@@ -63,6 +63,13 @@ enum DownloadCommand {
                     "--progress-template", "download:STUDIO_PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
                     "--print", "before_dl:STUDIO_TITLE:%(title)s", "--print", "after_move:STUDIO_FILE:%(filepath)s",
                     "--no-simulate", "-o", "%(title).180s [%(id)s].%(ext)s", "-f", selector(for: options)]
+        // Twitch VODs use HLS segments. Keep the downloaded stream in MPEG-TS so yt-dlp
+        // does not apply its known MPEG-TS-in-MP4 AAC timestamp fixup, which can truncate
+        // long VODs. The user's selected container is still applied below via remux.
+        if let host = URLComponents(string: url)?.host?.lowercased(),
+           host == "twitch.tv" || host.hasSuffix(".twitch.tv") {
+            args.append("--hls-use-mpegts")
+        }
         if options.kind == .audio {
             let extras = ["aiff", "mka", "ogg"]
             args += ["-x", "--audio-format", extras.contains(options.container) ? "best" : options.container,
