@@ -32,7 +32,7 @@ jobs:
         run: |
           dotnet --info
           if (-not (Test-Path 'C:\msys64\usr\bin\bash.exe')) { throw 'MSYS2 is not available on the Windows runner' }
-          & 'C:\msys64\usr\bin\bash.exe' -lc 'pacman --needed --noconfirm -S mingw-w64-x86_64-toolchain make pkgconf xz'
+          & 'C:\msys64\usr\bin\bash.exe' -lc 'pacman --needed --noconfirm -S mingw-w64-x86_64-toolchain make pkgconf xz diffutils'
           if ($LASTEXITCODE -ne 0) { throw 'MSYS2 could not install the pinned-build prerequisites' }
       - name: Build and run .NET core tests
         shell: pwsh

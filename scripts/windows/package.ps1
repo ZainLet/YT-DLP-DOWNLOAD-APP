@@ -15,8 +15,8 @@ foreach ($file in @('YTDLPStudio.exe', 'YTDLPStudio.runtimeconfig.json', 'corecl
 }
 $config = Get-Content "$PublishDir/YTDLPStudio.runtimeconfig.json" -Raw | ConvertFrom-Json
 if (!$config.runtimeOptions.PSObject.Properties['includedFrameworks']) { throw 'App must be self-contained' }
-$ffmpegLicense = & "$PublishDir/tools/ffmpeg.exe" -L 2>&1 | Out-String
-if ($LASTEXITCODE -ne 0 -or $ffmpegLicense -notmatch 'GNU Lesser General Public License' -or $ffmpegLicense -match '--enable-gpl|--enable-nonfree') { throw 'Expected LGPL-only FFmpeg' }
+$ffmpegLicense = (& "$PublishDir/tools/ffmpeg.exe" -L 2>&1 | Out-String) -replace '\s+', ' '
+if ($LASTEXITCODE -ne 0 -or $ffmpegLicense -notmatch 'GNU Lesser General Public License' -or $ffmpegLicense -match '--enable-gpl|--enable-nonfree|--enable-version3') { throw 'Expected LGPL-only FFmpeg; inspect FFmpeg-LICENSE-OUTPUT.txt and FFmpeg-BUILD-CONFIG.txt' }
 # Preserve the framework distribution's own full notices, in addition to app/tool notices.
 $dotnetRoot = Split-Path (Get-Command dotnet).Source
 $frameworkNotices = @(Get-ChildItem "$dotnetRoot/shared" -Recurse -File | Where-Object { $_.Name -match '^(LICENSE\.txt|ThirdPartyNotices\.txt)$' })

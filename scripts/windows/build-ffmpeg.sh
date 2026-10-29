@@ -59,9 +59,26 @@ NOTICES="$BASE/publish/ThirdParty"
 cp "$BASE/ffmpeg-work/ffmpeg-8.0.1/COPYING.LGPLv2.1" "$NOTICES/FFmpeg-LGPL-2.1.txt"
 cp "$BASE/ffmpeg-work/ffmpeg-8.0.1/LICENSE.md" "$NOTICES/FFmpeg-LICENSE.txt"
 cp "$BASE/ffmpeg-work/lame-3.100/COPYING" "$NOTICES/LAME-LICENSE.txt"
-"$BASE/publish/tools/ffmpeg.exe" -buildconf > "$NOTICES/FFmpeg-BUILD-CONFIG.txt" 2>&1
-"$BASE/publish/tools/ffmpeg.exe" -L > "$NOTICES/FFmpeg-LICENSE-OUTPUT.txt" 2>&1
-grep -q 'GNU Lesser General Public License' "$NOTICES/FFmpeg-LICENSE-OUTPUT.txt"
-if grep -q -- '--enable-gpl\|--enable-nonfree\|--enable-version3' "$NOTICES/FFmpeg-BUILD-CONFIG.txt"; then exit 1; fi
+"$BASE/publish/tools/ffmpeg.exe" -buildconf > "$NOTICES/FFmpeg-BUILD-CONFIG.txt" 2>&1 || {
+    cat "$NOTICES/FFmpeg-BUILD-CONFIG.txt" >&2
+    echo 'Could not inspect the FFmpeg build configuration.' >&2
+    exit 1
+}
+"$BASE/publish/tools/ffmpeg.exe" -L > "$NOTICES/FFmpeg-LICENSE-OUTPUT.txt" 2>&1 || {
+    cat "$NOTICES/FFmpeg-LICENSE-OUTPUT.txt" >&2
+    echo 'Could not inspect the FFmpeg license output.' >&2
+    exit 1
+}
+# FFmpeg wraps this phrase across lines, so normalize whitespace before checking.
+python - "$NOTICES/FFmpeg-LICENSE-OUTPUT.txt" "$NOTICES/FFmpeg-BUILD-CONFIG.txt" <<'PY'
+import pathlib, re, sys
+license_text = re.sub(r'\s+', ' ', pathlib.Path(sys.argv[1]).read_text()).lower()
+build_config = pathlib.Path(sys.argv[2]).read_text().lower()
+if 'gnu lesser general public license' not in license_text:
+    raise SystemExit('FFmpeg did not identify itself as an LGPL build; see FFmpeg-LICENSE-OUTPUT.txt')
+enabled_forbidden = re.search(r'(?<!\S)--enable-(?:gpl|nonfree|version3)(?=\s|$)', build_config)
+if enabled_forbidden:
+    raise SystemExit('FFmpeg build enables a GPL, nonfree, or LGPLv3 option: ' + enabled_forbidden.group(0))
+PY
 cp "$BASE/ffmpeg-work/ffmpeg-8.0.1/ffbuild/config.log" "$BASE/evidence/ffmpeg-config.log"
 cp "$BASE/ffmpeg-work/lame-3.100/config.log" "$BASE/evidence/lame-config.log"
