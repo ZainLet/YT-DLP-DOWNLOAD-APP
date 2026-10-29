@@ -66,8 +66,9 @@ enum DownloadCommand {
         // Twitch VODs use HLS segments. Keep the downloaded stream in MPEG-TS so yt-dlp
         // does not apply its known MPEG-TS-in-MP4 AAC timestamp fixup, which can truncate
         // long VODs. The user's selected container is still applied below via remux.
-        if let host = URLComponents(string: url)?.host?.lowercased(),
-           host == "twitch.tv" || host.hasSuffix(".twitch.tv") {
+        let host = URLComponents(string: url)?.host?.lowercased() ?? ""
+        let isTwitch = host == "twitch.tv" || host.hasSuffix(".twitch.tv")
+        if isTwitch {
             args.append("--hls-use-mpegts")
         }
         if options.kind == .audio {
@@ -81,6 +82,10 @@ enum DownloadCommand {
         } else if options.container != "auto" {
             // Remux changes the container, not the encoded video. Unsupported pairs fail visibly.
             args += ["--remux-video", options.container]
+        } else if isTwitch {
+            // HLS is downloaded as MPEG-TS to avoid long-VOD timestamp truncation.
+            // Keep the default user-facing video format useful by remuxing to MP4 without re-encoding.
+            args += ["--remux-video", "mp4"]
         }
         return args + ["--", url]
     }
