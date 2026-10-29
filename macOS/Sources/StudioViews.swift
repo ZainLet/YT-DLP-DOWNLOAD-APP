@@ -199,7 +199,7 @@ struct ContentView: View {
                 }.pickerStyle(.segmented).labelsHidden()
                 OptionMenu(title: "Formato", selection: $options.container,
                            values: options.kind == .video ? DownloadCommand.videoContainers : DownloadCommand.audioContainers,
-                           label: { ["auto": "Original · sem remux", "best": "Original · melhor áudio", "vorbis": "OGG · Vorbis", "alac": "ALAC · sem perdas", "flac": "FLAC · sem perdas", "wav": "WAV · sem perdas"][$0] ?? $0.uppercased() })
+                           label: { ["auto": "Automático · MP4 na Twitch", "best": "Original · melhor áudio", "vorbis": "OGG · Vorbis", "alac": "ALAC · sem perdas", "flac": "FLAC · sem perdas", "wav": "WAV · sem perdas"][$0] ?? $0.uppercased() })
                 if options.kind == .video {
                     OptionMenu(title: "Resolução máxima", selection: $options.resolution,
                                values: ["best", "4320", "2160", "1440", "1080", "720", "480", "360", "240", "144"],
@@ -348,6 +348,7 @@ private struct JobRow: View {
     let cancel: () -> Void
     private var formatLabel: String {
         if !job.file.isEmpty { return URL(fileURLWithPath: job.file).pathExtension.uppercased() }
+        if job.options.kind == .video && job.options.container == "auto" && DownloadCommand.isTwitchURL(job.url) { return "MP4 · Twitch" }
         return ["auto", "best"].contains(job.options.container) ? "Original" : job.options.container.uppercased()
     }
     var body: some View {

@@ -26,6 +26,7 @@ import Foundation
         let twitchArgs = DownloadCommand.arguments(url: "https://www.twitch.tv/videos/2903366879", options: options)
         check(twitchArgs.contains("--hls-use-mpegts"), "Twitch HLS avoids MP4 timestamp fixup")
         check(twitchArgs.firstIndex(of: "--remux-video").map { twitchArgs[$0 + 1] == "mp4" } == true, "Twitch auto output is remuxed to MP4")
+        check(DownloadCommand.isTwitchURL("https://clips.twitch.tv/example"), "Twitch subdomains are detected")
         check(!DownloadCommand.arguments(url: "https://evil-twitch.tv/videos/2903366879", options: options).contains("--hls-use-mpegts"), "Unrelated domains do not use Twitch HLS handling")
         let videoOnly = SourceFormat.parse(["format_id": "137", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 1080])!
         check(videoOnly.selector == "137+ba", "Video-only format gets audio")
