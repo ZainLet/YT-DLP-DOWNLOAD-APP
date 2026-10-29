@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>YTDLP Studio 1.2.0</title>
+  <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+  <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
+  <allowed-os-versions><os-version min="14.0"/></allowed-os-versions>
+  <welcome file="Welcome.html"/>
+  <readme file="ReadMe.html"/>
+  <choices-outline><line choice="studio"/></choices-outline>
+  <choice id="studio" visible="false" title="YTDLP Studio">
+    <pkg-ref id="local.ytdlp.studio"/>
+  </choice>
+  <pkg-ref id="local.ytdlp.studio" version="1.2.0" onConclusion="none">YTDLP-Studio-component.pkg</pkg-ref>
+</installer-gui-script>

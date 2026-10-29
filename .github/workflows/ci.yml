@@ -1,0 +1,31 @@
+name: macOS build and checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-app:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate packaging definitions
+        run: |
+          bash -n build_mac_app.sh scripts/*.sh
+          plutil -lint macOS/Info.plist packaging/Component.plist
+          xmllint --noout packaging/Distribution.xml
+      - name: Build native app
+        run: bash build_mac_app.sh
+      - name: Verify bundle
+        run: codesign --verify --deep --strict "YTDLP Studio.app"
+      - name: Check command builder and format parsing
+        run: |
+          xcrun swiftc macOS/Sources/DownloadCore.swift macOS/Tests/DownloadCoreChecks.swift \
+            -parse-as-library -o .build/download-checks -module-cache-path .build/ModuleCache
+          .build/download-checks

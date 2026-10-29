@@ -1,0 +1,8 @@
+.DS_Store
+.build/
+dist/
+*.app/
+__pycache__/
+*.pyc
+.AppIcon.iconset
+*.xcuserstate
