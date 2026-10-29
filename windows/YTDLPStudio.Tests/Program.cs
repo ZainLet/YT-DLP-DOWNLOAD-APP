@@ -127,7 +127,8 @@ internal static class Program
         {
             Environment.SetEnvironmentVariable("STUDIO_TEST_FAKE", "probe-ok");
             var probe = await service.ProbeAsync("https://example.test");
-            Assert(probe.Title == "Título ç" && probe.Formats.Count == 1, "probe process parses");
+            Assert(probe.Title == "Título ç" && probe.Formats.Count == 1,
+                $"probe process parses (title='{probe.Title}', formats={probe.Formats.Count})");
             Environment.SetEnvironmentVariable("STUDIO_TEST_FAKE", "probe-error");
             var ex = await ThrowsAsync<DownloadException>(() => service.ProbeAsync("https://example.test"));
             Assert(ex.ExitCode == 7 && ex.ErrorReport.Contains("probe denied"), "probe exit failure");
@@ -168,6 +169,7 @@ internal static class Program
     }
     private static async Task<int> Fake(string mode, string[] args)
     {
+        Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         if (mode == "cancel")
         {
             var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
