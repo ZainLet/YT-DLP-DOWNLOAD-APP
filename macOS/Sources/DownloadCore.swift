@@ -42,6 +42,11 @@ enum DownloadCommand {
     static let videoCodecs = ["any", "h264", "hevc", "av1", "vp9", "vp8", "mpeg4", "mpeg2", "theora", "prores"]
     static let audioCodecs = ["any", "aac", "opus", "vorbis", "mp3", "flac", "alac", "pcm", "ac3", "eac3", "dts"]
 
+    static func isTwitchURL(_ url: String) -> Bool {
+        let host = URLComponents(string: url)?.host?.lowercased() ?? ""
+        return host == "twitch.tv" || host.hasSuffix(".twitch.tv")
+    }
+
     static func codecFilter(_ codec: String, video: Bool) -> String {
         guard codec != "any" else { return "" }
         let aliases = ["h264": "avc|h264", "hevc": "hev|hvc|hevc|h265", "av1": "av01|av1", "vp9": "vp09|vp9", "vp8": "vp08|vp8", "aac": "mp4a|aac", "mpeg2": "mpeg2", "pcm": "pcm"]
@@ -63,6 +68,13 @@ enum DownloadCommand {
                     "--progress-template", "download:STUDIO_PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
                     "--print", "before_dl:STUDIO_TITLE:%(title)s", "--print", "after_move:STUDIO_FILE:%(filepath)s",
                     "--no-simulate", "-o", "%(title).180s [%(id)s].%(ext)s", "-f", selector(for: options)]
+        // Twitch VODs use HLS segments. Keep the downloaded stream in MPEG-TS so yt-dlp
+        // does not apply its known MPEG-TS-in-MP4 AAC timestamp fixup, which can truncate
+        // long VODs. The user's selected container is still applied below via remux.
+        let isTwitch = isTwitchURL(url)
+        if isTwitch {
+            args.append("--hls-use-mpegts")
+        }
         if options.kind == .audio {
             let extras = ["aiff", "mka", "ogg"]
             args += ["-x", "--audio-format", extras.contains(options.container) ? "best" : options.container,
@@ -74,6 +86,10 @@ enum DownloadCommand {
         } else if options.container != "auto" {
             // Remux changes the container, not the encoded video. Unsupported pairs fail visibly.
             args += ["--remux-video", options.container]
+        } else if isTwitch {
+            // HLS is downloaded as MPEG-TS to avoid long-VOD timestamp truncation.
+            // Keep the default user-facing video format useful by remuxing to MP4 without re-encoding.
+            args += ["--remux-video", "mp4"]
         }
         return args + ["--", url]
     }
