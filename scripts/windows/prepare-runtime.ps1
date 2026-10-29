@@ -21,7 +21,8 @@ foreach ($item in $lock.downloads) {
         $partial = "$target.partial"
         try {
             Invoke-WebRequest -Uri $item.url -OutFile $partial -MaximumRetryCount 3 -RetryIntervalSec 3 -TimeoutSec 300
-            if ((Get-FileHash $partial -Algorithm SHA256).Hash -ine $item.sha256) { throw "SHA256 mismatch: $($item.name)" }
+            $actualHash = (Get-FileHash $partial -Algorithm SHA256).Hash
+            if ($actualHash -ine $item.sha256) { throw "SHA256 mismatch: $($item.name); expected $($item.sha256), received $actualHash, bytes $((Get-Item $partial).Length)" }
             Move-Item $partial $target -Force
         } finally { if (Test-Path $partial) { Remove-Item $partial -Force } }
     }
