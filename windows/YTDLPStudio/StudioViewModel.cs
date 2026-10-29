@@ -68,9 +68,9 @@ public sealed class StudioViewModel : Observable
     public string[] LinkList => Links.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     public string LinkCountLabel => LinkList.Length == 0 ? "Um por linha" : $"{LinkList.Length} {(LinkList.Length == 1 ? "link" : "links")}";
     public Visibility PlaceholderVisibility => Links.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-    public bool CanProbe => LinkList.Length > 0 && LinkList.All(ValidUrl);
+    public bool CanProbe => LinkList.Length > 0 && LinkList.All(DownloadCommand.IsValidUrl);
     public bool CanAdd => CanProbe && !string.IsNullOrWhiteSpace(Directory) && !stopping;
-    public string ValidationError => LinkList.Any(x => !ValidUrl(x)) ? "Use links completos começando com https:// ou http://" : "";
+    public string ValidationError => LinkList.Any(x => !DownloadCommand.IsValidUrl(x)) ? "Use links completos começando com https:// ou http://" : "";
     public string DownloadButtonLabel => LinkList.Length > 1 ? $"Baixar {LinkList.Length} arquivos" : "Iniciar download";
     public Visibility VideoVisibility => Kind == MediaKind.Video ? Visibility.Visible : Visibility.Collapsed;
     public Visibility AudioVisibility => Kind == MediaKind.Audio ? Visibility.Visible : Visibility.Collapsed;
@@ -78,9 +78,16 @@ public sealed class StudioViewModel : Observable
     public int QueuedCount => Jobs.Count(x => x.Status == "Na fila");
     public int DoneCount => Jobs.Count(x => x.Status == "Concluído");
     public bool ActivityEmpty => !ActivityJobs.Any();
-    public IEnumerable<StudioJob> RecentJobs => Jobs.Take(2);
-    public IEnumerable<StudioJob> CompletedJobs => Jobs.Where(x => x.Status == "Concluído");
-    public IEnumerable<StudioJob> ActivityJobs => Jobs.Where(x => Filter switch { "Baixando" => x.IsRunning, "Na fila" => x.Status == "Na fila", "Falhas" => x.Status == "Falhou", "Cancelados" => x.Status == "Cancelado", _ => x.Status != "Concluído" });
+    public IEnumerable<StudioJob> RecentJobs => Jobs.Reverse().Take(2);
+    public IEnumerable<StudioJob> CompletedJobs => Jobs.Where(x => x.Status == "Concluído").Reverse();
+    public IEnumerable<StudioJob> ActivityJobs
+    {
+        get
+        {
+            IEnumerable<StudioJob> ordered = Filter == "Na fila" ? Jobs : Jobs.Reverse();
+            return ordered.Where(x => Filter switch { "Baixando" => x.Status == "Baixando", "Na fila" => x.Status == "Na fila", "Falhas" => x.Status == "Falhou", "Cancelados" => x.Status == "Cancelado", _ => x.Status != "Concluído" });
+        }
+    }
     public Choice[] Containers => (Kind == MediaKind.Video ? DownloadCommand.VideoContainers : DownloadCommand.AudioContainers).Select(x => new Choice(x, Label(x))).ToArray();
     public Choice[] Resolutions { get; } = new[] { "best", "4320", "2160", "1440", "1080", "720", "480", "360", "240", "144" }.Select(x => new Choice(x, x switch { "best" => "Melhor disponível", "4320" => "8K · 4320p", "2160" => "4K · 2160p", "1440" => "2K · 1440p", "1080" => "Full HD · 1080p", "720" => "HD · 720p", _ => x + "p" })).ToArray();
     public Choice[] AudioQualities { get; } = Enumerable.Range(0, 11).Select(x => new Choice(x.ToString(), x == 0 ? "Melhor qualidade · VBR 0" : $"VBR {x}")).Concat(new[] { "320K", "256K", "192K", "160K", "128K", "96K", "64K" }.Select(x => new Choice(x, x[..^1] + " kbps"))).ToArray();
@@ -88,7 +95,6 @@ public sealed class StudioViewModel : Observable
     public Choice[] AudioCodecs => DownloadCommand.AudioCodecs.Select(x => new Choice(x, CodecLabel(x))).ToArray();
     public Choice[] FrameRates { get; } = new[] { "any", "120", "60", "50", "30", "25", "24" }.Select(x => new Choice(x, x == "any" ? "Automático" : $"Até {x} fps")).ToArray();
     public DownloadOptions CurrentOptions => new() { Kind = Kind, Container = Container, Resolution = Resolution, AudioQuality = AudioQuality, VideoCodec = VideoCodec, AudioCodec = AudioCodec, Fps = Fps, Selector = Selector };
-    private static bool ValidUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https") && !string.IsNullOrWhiteSpace(uri.Host);
     private static string Label(string value) => value switch { "auto" => "Original · sem remux", "best" => "Original · melhor áudio", "vorbis" => "OGG · Vorbis", "flac" => "FLAC · sem perdas", "alac" => "ALAC · sem perdas", "wav" => "WAV · sem perdas", _ => value.ToUpperInvariant() };
     private static string CodecLabel(string value) => value switch { "any" => "Automático · melhor disponível", "h264" => "H.264 / AVC", "hevc" => "H.265 / HEVC", "mpeg4" => "MPEG-4", "mpeg2" => "MPEG-2", "prores" => "ProRes", _ => value.ToUpperInvariant() };
     private void UpdateInput() { foreach (var p in new[] { nameof(CanAdd), nameof(CanProbe), nameof(LinkCountLabel), nameof(PlaceholderVisibility), nameof(ValidationError), nameof(DownloadButtonLabel) }) Changed(p); }
@@ -97,11 +103,11 @@ public sealed class StudioViewModel : Observable
     {
         if (!CanAdd) return;
         var urls = LinkList; var options = CurrentOptions; var path = Path.GetFullPath(Environment.ExpandEnvironmentVariables(Directory));
-        foreach (string url in urls) Jobs.Insert(0, new(url, options, path));
+        foreach (string url in urls) Jobs.Add(new(url, options, path));
         Links = ""; UpdateJobs(); StartNext();
     }
     public StudioJob Enqueue(string url, DownloadOptions options, string destination)
-    { var job = new StudioJob(url, options, destination); Jobs.Insert(0, job); UpdateJobs(); StartNext(); return job; }
+    { var job = new StudioJob(url, options, destination); Jobs.Add(job); UpdateJobs(); StartNext(); return job; }
     public void Cancel(StudioJob job)
     {
         if (job.IsRunning) { job.Status = "Cancelando…"; job.Cancellation.Cancel(); }
@@ -113,7 +119,7 @@ public sealed class StudioViewModel : Observable
     private void StartNext()
     {
         if (stopping) return;
-        while (ActiveCount < 2 && Jobs.LastOrDefault(x => x.Status == "Na fila") is { } next)
+        while (ActiveCount < 2 && Jobs.FirstOrDefault(x => x.Status == "Na fila") is { } next)
         { next.IsRunning = true; next.Status = "Preparando"; UpdateJobs(); Run(next); }
     }
     private async void Run(StudioJob job)

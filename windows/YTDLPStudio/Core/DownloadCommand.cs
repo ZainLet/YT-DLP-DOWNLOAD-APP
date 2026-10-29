@@ -15,11 +15,12 @@ public static class DownloadCommand
     public static IReadOnlyList<string> AudioCodecs { get; } = Array.AsReadOnly(new[] { "any", "aac", "opus", "vorbis", "mp3", "flac", "alac", "pcm", "ac3", "eac3", "dts" });
     public static string ValidateUrl(string url)
     {
-        if (string.IsNullOrWhiteSpace(url) || url.Any(char.IsControl) || !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || string.IsNullOrEmpty(uri.Host))
+        if (!IsValidUrl(url))
             throw new ArgumentException("Informe um link HTTP ou HTTPS válido.", nameof(url));
         return url;
     }
+    public static bool IsValidUrl(string? url) => !string.IsNullOrWhiteSpace(url) && !url.Any(char.IsControl) &&
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) && !string.IsNullOrEmpty(uri.Host);
     public static string CodecFilter(string codec, bool video)
     {
         if (!(video ? VideoCodecs : AudioCodecs).Contains(codec)) throw new ArgumentException("Codec desconhecido: " + codec);
@@ -62,8 +63,8 @@ public static class DownloadCommand
         var args = CommonArguments(toolDirectory ?? Path.Combine(AppContext.BaseDirectory, "tools"));
         args.AddRange(new[] { "--newline", "--no-overwrites", "--progress", "--progress-template", "download:STUDIO_PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s", "--print", "before_dl:STUDIO_TITLE:%(title)s", "--print", "after_move:STUDIO_FILE:%(filepath)j", "--no-simulate", "-o", "%(title).180s [%(id)s].%(ext)s", "-f", selector });
         if (options.Kind == MediaKind.Audio)
-            args.AddRange(new[] { "-x", "--audio-format", options.Container is "aiff" or "mka" or "ogg" or "alac" ? "best" : options.Container, "--audio-quality", options.AudioQuality });
-        else if (options.Container != "auto") args.AddRange(new[] { "--remux-video", options.Container });
+        args.AddRange(new[] { "-x", "--audio-format", options.Container is "aiff" or "mka" or "ogg" or "alac" ? "best" : options.Container, "--audio-quality", options.AudioQuality });
+        else if (options.Container is not ("auto" or "gif")) args.AddRange(new[] { "--remux-video", options.Container });
         args.AddRange(new[] { "--", url }); return args.AsReadOnly();
     }
     internal static ProcessStartInfo StartInfo(string executable, IEnumerable<string> args, string directory)

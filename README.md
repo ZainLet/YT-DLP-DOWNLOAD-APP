@@ -3,7 +3,7 @@
   <h1>YTDLP Studio</h1>
   <p>Vídeos e músicas, do link para o seu Mac.</p>
   <p><strong>Português</strong> · <a href="README.en.md">English</a></p>
-  <p><a href="https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases/latest">Baixar para macOS</a> · <a href="https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases/tag/windows-v1.3.0-beta.1">Beta para Windows</a> · <a href="#instalação">Instalação</a> · <a href="#compilar-a-partir-do-código">Compilar</a></p>
+  <p><a href="https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases/latest">Baixar para macOS</a> · <a href="https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases">Beta para Windows</a> · <a href="#instalação">Instalação</a> · <a href="#compilar-a-partir-do-código">Compilar</a></p>
 </div>
 
 Aplicativo nativo para macOS feito com SwiftUI e AppKit. Organiza downloads em lote do [yt-dlp](https://github.com/yt-dlp/yt-dlp) em uma janela com fundo escuro translúcido, desfoque nativo e controles Liquid Glass.
@@ -33,7 +33,7 @@ O binário distribuído é **arm64**. Não há uma versão Intel nesta release. 
 
 ### Beta para Windows
 
-Uma versão beta nativa para **Windows 10/11 x64** está disponível na [release Windows Beta](https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases/tag/windows-v1.3.0-beta.1). O instalador inclui o app e as ferramentas necessárias; também há uma versão portátil. Esta beta ainda precisa ser testada em computadores Windows. Consulte as instruções e limitações nas notas da release.
+Uma versão beta nativa para **Windows 10 versão 22H2 (build 19045) e Windows 11 x64** está disponível na [página de releases](https://github.com/ZainLet/YT-DLP-DOWNLOAD-APP/releases). O instalador inclui o app e as ferramentas necessárias; também há uma versão portátil. Esta beta ainda precisa ser testada em computadores Windows. Consulte as instruções e limitações nas notas da release.
 
 ## O que o app faz
 

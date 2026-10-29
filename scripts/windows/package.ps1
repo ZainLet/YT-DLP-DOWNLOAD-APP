@@ -19,7 +19,10 @@ $ffmpegLicense = (& "$PublishDir/tools/ffmpeg.exe" -L 2>&1 | Out-String) -replac
 if ($LASTEXITCODE -ne 0 -or $ffmpegLicense -notmatch 'GNU Lesser General Public License' -or $ffmpegLicense -match '--enable-gpl|--enable-nonfree|--enable-version3') { throw 'Expected LGPL-only FFmpeg; inspect FFmpeg-LICENSE-OUTPUT.txt and FFmpeg-BUILD-CONFIG.txt' }
 # Preserve the framework distribution's own full notices, in addition to app/tool notices.
 $dotnetRoot = Split-Path (Get-Command dotnet).Source
-$frameworkNotices = @(Get-ChildItem "$dotnetRoot/shared" -Recurse -File | Where-Object { $_.Name -match '^(LICENSE\.txt|ThirdPartyNotices\.txt)$' })
+$frameworkNotices = @(
+    Get-ChildItem $dotnetRoot -File | Where-Object { $_.Name -match '^(LICENSE\.txt|ThirdPartyNotices\.txt)$' }
+    Get-ChildItem "$dotnetRoot/shared" -Recurse -File | Where-Object { $_.Name -match '^(LICENSE\.txt|ThirdPartyNotices\.txt)$' }
+)
 if (!$frameworkNotices) { throw 'Missing .NET framework license/third-party notices' }
 foreach ($notice in $frameworkNotices) {
     $relative = [IO.Path]::GetRelativePath($dotnetRoot, $notice.FullName)
@@ -43,7 +46,7 @@ Copy-Item "$thirdParty/FFmpeg-BUILD-CONFIG.txt" $sources -Force
 # Both installer and portable include the corresponding sources; also supply a separate source artifact.
 $prefix = "YTDLP-Studio-$Version-win-x64"
 Compress-Archive -Path "$sources/*" -DestinationPath "$dist/$prefix-ThirdPartySources.zip" -Force
-$manifest = @(Get-ChildItem $PublishDir -Recurse -File | Sort-Object FullName | ForEach-Object {
+$manifest = @(Get-ChildItem $PublishDir -Recurse -File | Where-Object { $_.FullName -ne (Join-Path $PublishDir 'publish-manifest.json') } | Sort-Object FullName | ForEach-Object {
     [ordered]@{ path = [IO.Path]::GetRelativePath($PublishDir, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $_.Length }
 })
 $manifest | ConvertTo-Json -Depth 4 | Set-Content "$evidence/publish-manifest.json" -Encoding utf8

@@ -58,7 +58,8 @@ internal static class Program
         foreach (var container in DownloadCommand.VideoContainers)
         {
             var args = DownloadCommand.Arguments("https://example.test/video", options with { Container = container }, evidence);
-            Assert(args.Contains("--remux-video") == (container != "auto"), "video " + container);
+            Assert(args.Contains("--remux-video") == (container is not ("auto" or "gif")), "video " + container);
+            if (container == "gif") Assert(!args.Contains("--remux-video"), "GIF uses an encoder, not remux");
         }
         foreach (var container in DownloadCommand.AudioContainers)
         {
@@ -94,6 +95,7 @@ internal static class Program
         Assert(hostile.Contains("deno:" + Path.Combine(evidence, OperatingSystem.IsWindows() ? "deno.exe" : "deno")), "absolute deno");
         foreach (var bad in new[] { "file:///etc/passwd", "ftp://example.test/a", "--exec=bad", "https://x\n--exec=bad", "", "http://" })
             Throws<ArgumentException>(() => DownloadCommand.ValidateUrl(bad));
+        Assert(!DownloadCommand.IsValidUrl("https://example.test/\tvideo"), "URL validation rejects control characters consistently");
         Throws<ArgumentException>(() => DownloadCommand.Selector(options with { VideoCodec = "h264;touch" }));
         Throws<ArgumentException>(() => DownloadCommand.Selector(options with { Fps = "30][exec=evil" }));
         Throws<ArgumentException>(() => DownloadCommand.Arguments("https://example.test", options with { AudioQuality = "--exec=bad" }));
@@ -218,7 +220,9 @@ internal static class Program
         foreach (var container in DownloadCommand.AudioContainers)
         {
             var updates = new List<DownloadUpdate>();
-            var downloaded = await service.RunAsync(server.Url, new() { Kind = MediaKind.Audio, Container = container }, Path.Combine(evidence, "áudio " + container), updates.Add);
+            var outputDirectory = Path.Combine(evidence, "áudio " + container);
+            var downloaded = await service.RunAsync(server.Url, new() { Kind = MediaKind.Audio, Container = container }, outputDirectory, updates.Add);
+            Assert(Path.GetDirectoryName(downloaded.Path) == outputDirectory && !Directory.EnumerateDirectories(outputDirectory, ".studio-*", SearchOption.TopDirectoryOnly).Any(), "isolated staging cleaned " + container);
             var inspected = await RunTool(DownloadCommand.ToolPath(tools, "ffprobe"), "-v", "error", "-show_entries", "stream=codec_name,codec_type", "-show_entries", "format=format_name,duration", "-of", "json", downloaded.Path);
             File.WriteAllText(Path.Combine(evidence, container + "-ffprobe.json"), inspected.Output);
             Assert(inspected.Code == 0, "ffprobe " + container);
@@ -227,11 +231,20 @@ internal static class Program
             Assert(streams.Length == 1 && streams[0].GetProperty("codec_type").GetString() == "audio", "audio only " + container);
             Assert(streams[0].GetProperty("codec_name").GetString() == expected[container], "actual codec " + container);
             Assert(updates[^1].Status == "Concluído" && new FileInfo(downloaded.Path).Length > 0, "real complete " + container);
+            if (container is "aiff" or "mka" or "ogg" or "alac") Assert(!File.Exists(Path.ChangeExtension(downloaded.Path, "wav")), "temporary source removed " + container);
             results.Add(new { Container = container, downloaded.Path, downloaded.Title });
             Console.WriteLine("PASS real audio " + container);
         }
         var bitrateResult = await service.RunAsync(server.Url, new() { Kind = MediaKind.Audio, Container = "ogg", AudioQuality = "128K" }, Path.Combine(evidence, "ogg bitrate"), _ => { });
         Assert(File.Exists(bitrateResult.Path), "OGG bitrate conversion");
+        var videoFixture = Path.Combine(evidence, "fixture.mp4");
+        var videoGenerated = await RunTool(DownloadCommand.ToolPath(tools, "ffmpeg"), "-nostdin", "-hide_banner", "-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=10:duration=0.5", "-c:v", "mpeg4", "-q:v", "5", "-an", "-movflags", "+faststart", videoFixture);
+        Assert(videoGenerated.Code == 0, "generate GIF video fixture: " + videoGenerated.Output);
+        using var videoServer = new FixtureServer(File.ReadAllBytes(videoFixture), "fixture.mp4", "video/mp4");
+        var gifResult = await service.RunAsync(videoServer.Url, new() { Kind = MediaKind.Video, Container = "gif" }, Path.Combine(evidence, "gif output"), _ => { });
+        Assert(Path.GetExtension(gifResult.Path) == ".gif" && File.Exists(gifResult.Path) && !File.Exists(Path.ChangeExtension(gifResult.Path, "mp4")), "GIF conversion replaces source cleanly");
+        var gifProbe = await RunTool(DownloadCommand.ToolPath(tools, "ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", gifResult.Path);
+        Assert(gifProbe.Code == 0 && gifProbe.Output.Trim() == "gif", "GIF output codec");
         File.WriteAllText(Path.Combine(evidence, "audio-results.json"), JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
     }
     private sealed class FixtureServer : IDisposable
@@ -239,9 +252,9 @@ internal static class Program
         private readonly TcpListener listener = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource stop = new();
         public string Url { get; }
-        public FixtureServer(byte[] data)
+        public FixtureServer(byte[] data, string fileName = "fixture.wav", string contentType = "audio/wav")
         {
-            listener.Start(); Url = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/fixture.wav";
+            listener.Start(); Url = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/{fileName}";
             _ = Task.Run(async () =>
             {
                 try
@@ -257,7 +270,7 @@ internal static class Program
                                 {
                                     var stream = client.GetStream(); using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, true);
                                     var request = await reader.ReadLineAsync(); while (await reader.ReadLineAsync() is { Length: > 0 }) { }
-                                    var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {data.Length}\r\nConnection: close\r\n\r\n");
+                                    var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: {contentType}\r\nContent-Length: {data.Length}\r\nConnection: close\r\n\r\n");
                                     await stream.WriteAsync(header); if (request?.StartsWith("HEAD ") != true) await stream.WriteAsync(data);
                                 }
                                 catch (IOException) { }

@@ -26,13 +26,15 @@ public sealed class DownloadService
         ArgumentNullException.ThrowIfNull(onUpdate);
         var args = DownloadCommand.Arguments(url, options, ToolDirectory);
         token.ThrowIfCancellationRequested();
-        string title = "", finalPath = "", lastError = "";
+        string title = "", finalPath = "", lastError = "", stagingDirectory = "";
         var callbackLock = new object();
         void Notify(DownloadUpdate update) { lock (callbackLock) onUpdate(update); }
         try
         {
             var executable = Tool("yt-dlp"); _ = Tool("ffmpeg"); _ = Tool("ffprobe"); _ = Tool("deno");
             directory = Path.GetFullPath(directory); Directory.CreateDirectory(directory);
+            stagingDirectory = Path.Combine(directory, ".studio-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stagingDirectory);
             Notify(new(Status: "Preparando"));
             var run = await ExecuteAsync(DownloadCommand.StartInfo(executable, args, directory), line =>
             {
@@ -51,19 +53,27 @@ public sealed class DownloadService
                     }
                 }
             }, false, token).ConfigureAwait(false);
+            if (token.IsCancellationRequested && run.ExitCode != 0) throw new OperationCanceledException(token);
             if (run.ExitCode != 0) throw Failure("O download falhou. Verifique o link, o formato e os codecs selecionados.", run, lastError);
             if (lastError.Length != 0) throw Failure("O download relatou um erro: " + lastError, run, lastError);
             if (string.IsNullOrWhiteSpace(finalPath)) throw Failure("O processo terminou sem informar o arquivo final.", run);
-            finalPath = Path.GetFullPath(finalPath, directory);
+            finalPath = Path.GetFullPath(finalPath, stagingDirectory);
             if (!File.Exists(finalPath)) throw Failure("O arquivo final não foi encontrado: " + finalPath, run);
             if (options.Kind == MediaKind.Audio && options.Container is "aiff" or "mka" or "ogg" or "alac")
             {
                 Notify(new(Status: "Finalizando"));
                 finalPath = await ConvertExtraAudioAsync(finalPath, options, token).ConfigureAwait(false);
             }
-            token.ThrowIfCancellationRequested();
+            if (options.Kind == MediaKind.Video && options.Container == "gif")
+            {
+                Notify(new(Status: "Finalizando"));
+                finalPath = await ConvertVideoToGifAsync(finalPath, token).ConfigureAwait(false);
+            }
             if (!File.Exists(finalPath)) throw new DownloadException("O arquivo final não foi encontrado: " + finalPath);
             if (title.Length == 0) title = Path.GetFileNameWithoutExtension(finalPath);
+            var committedPath = Path.Combine(directory, Path.GetFileName(finalPath));
+            File.Move(finalPath, committedPath, false);
+            finalPath = committedPath;
             Notify(new(Title: title, Progress: 100, Status: "Concluído"));
             return new(finalPath, title);
         }
@@ -72,6 +82,13 @@ public sealed class DownloadService
         {
             var error = ex as DownloadException ?? new DownloadException("Não foi possível baixar: " + ex.Message, inner: ex);
             Notify(new(Status: "Falhou", Error: error.Message)); throw error;
+        }
+        finally
+        {
+            if (stagingDirectory.Length > 0 && Directory.Exists(stagingDirectory))
+            {
+                try { Directory.Delete(stagingDirectory, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
         }
     }
     private async Task<string> ConvertExtraAudioAsync(string source, DownloadOptions options, CancellationToken token)
@@ -95,10 +112,37 @@ public sealed class DownloadService
         try
         {
             var run = await ExecuteAsync(DownloadCommand.StartInfo(Tool("ffmpeg"), args, Path.GetDirectoryName(source)!), null, false, token).ConfigureAwait(false);
+            if (token.IsCancellationRequested && run.ExitCode != 0) throw new OperationCanceledException(token);
             if (run.ExitCode != 0 || !File.Exists(temporary)) throw Failure("A conversão de áudio falhou. Confira o suporte do FFmpeg ao codec selecionado.", run);
-            token.ThrowIfCancellationRequested();
-            // Existing destinations cause an explicit error, rather than false completion.
-            File.Move(temporary, destination, false);
+            if (Path.GetFullPath(source).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+                File.Replace(temporary, destination, null);
+            else
+            {
+                File.Move(temporary, destination, false);
+                try { File.Delete(source); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+            return destination;
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+    private async Task<string> ConvertVideoToGifAsync(string source, CancellationToken token)
+    {
+        var destination = Path.ChangeExtension(source, "gif");
+        var temporary = Path.Combine(Path.GetDirectoryName(source)!, ".studio-" + Guid.NewGuid().ToString("N") + ".gif");
+        var filter = "[0:v]fps=15,scale=640:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer";
+        var args = new[] { "-nostdin", "-hide_banner", "-n", "-i", source, "-filter_complex", filter, "-loop", "0", "-an", temporary };
+        try
+        {
+            var run = await ExecuteAsync(DownloadCommand.StartInfo(Tool("ffmpeg"), args, Path.GetDirectoryName(source)!), null, false, token).ConfigureAwait(false);
+            if (token.IsCancellationRequested && run.ExitCode != 0) throw new OperationCanceledException(token);
+            if (run.ExitCode != 0 || !File.Exists(temporary)) throw Failure("A conversão para GIF falhou.", run);
+            if (Path.GetFullPath(source).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+                File.Replace(temporary, destination, null);
+            else
+            {
+                File.Move(temporary, destination, false);
+                try { File.Delete(source); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
             return destination;
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -171,7 +215,6 @@ public sealed class DownloadService
         try
         {
             await Task.WhenAll(stdoutTask, stderrTask, process.WaitForExitAsync(CancellationToken.None)).ConfigureAwait(false);
-            token.ThrowIfCancellationRequested();
             return new(process.ExitCode, output.ToString(), overflow, log.ToString());
         }
         catch { Kill(); throw; }
