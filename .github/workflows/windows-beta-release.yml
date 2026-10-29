@@ -55,7 +55,7 @@ jobs:
           $tag = "windows-v$version"
           $patterns = @('*win-x64-Setup.exe', '*win-x64-Portable.zip', '*win-x64-ThirdPartySources.zip', 'SHA256SUMS')
           $assets = @(foreach ($pattern in $patterns) {
-            $matches = @(Get-ChildItem .release -File | Where-Object Name -like $pattern)
+            $matches = @(Get-ChildItem .release -Recurse -File | Where-Object Name -like $pattern)
             if ($matches.Count -ne 1) { throw "Expected exactly one asset matching $pattern." }
             $matches[0].FullName
           })
