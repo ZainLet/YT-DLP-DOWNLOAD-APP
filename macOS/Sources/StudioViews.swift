@@ -98,6 +98,7 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var filter = "Todos"
     @State private var showFormats = false
+    @State private var showInstagramLogin = false
     @State private var showStoryPicker = false
     @State private var instagramURL = ""
     @State private var pendingInstagramURL = ""
@@ -141,13 +142,18 @@ struct ContentView: View {
                                       download: {
                                           let selected = storyItems.filter { selectedStoryIDs.contains($0.id) }
                                           if !pendingInstagramURL.isEmpty {
-                                              manager.addInstagramStories(selected, url: pendingInstagramURL, options: options, directory: directory)
+                                              var instagramOptions = options
+                                              instagramOptions.instagramSessionUsername = manager.instagramSessionUsername
+                                              manager.addInstagramStories(selected, url: pendingInstagramURL, options: instagramOptions, directory: directory)
                                               instagramURL = ""
                                               pendingInstagramURL = ""
                                               showStoryPicker = false
                                               selectedTab = 1
                                           }
                                       })
+        }
+        .sheet(isPresented: $showInstagramLogin) {
+            InstagramLoginSheet(manager: manager) { showInstagramLogin = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: .studioNavigate)) { notification in
             if let tab = notification.object as? Int { selectedTab = tab; if tab == 0 { linksFocused = true } }
@@ -199,8 +205,17 @@ struct ContentView: View {
                     Panel {
                         VStack(alignment: .leading, spacing: 18) {
                             Label("Acesso e destino", systemImage: "lock.shield").font(.system(size: 15, weight: .semibold))
-                            OptionMenu(title: "Sessão do navegador", selection: Binding(get: { options.cookieBrowser.rawValue }, set: { options.cookieBrowser = CookieBrowser(rawValue: $0) ?? .none }), values: CookieBrowser.allCases.map(\.rawValue), label: { CookieBrowser(rawValue: $0)?.label ?? $0 })
-                            Text("Para listar Stories, selecione um navegador em que o Instagram esteja autenticado. A sessão é lida localmente no Mac e não é enviada para nenhum servidor.")
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(manager.instagramSessionUsername.isEmpty ? "Nenhuma conta conectada" : "@\(manager.instagramSessionUsername)")
+                                        .font(.system(size: 13, weight: .medium))
+                                    Text("Sessão local do Instaloader").font(.system(size: 11)).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(manager.instagramSessionUsername.isEmpty ? "Conectar…" : "Trocar…") { showInstagramLogin = true }
+                                    .buttonStyle(.borderless).font(.system(size: 12))
+                            }
+                            Text("A senha não é armazenada nem enviada para o backend. O Instaloader salva apenas a sessão local necessária para consultar Stories.")
                                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack { Label("Destino", systemImage: "folder").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary); Spacer(); Button("Alterar…", action: chooseFolder).buttonStyle(.borderless).font(.system(size: 12)) }
@@ -271,8 +286,7 @@ struct ContentView: View {
                 }.pickerStyle(.segmented).labelsHidden()
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Instagram e Stories", systemImage: "camera").font(.system(size: 12, weight: .semibold))
-                    OptionMenu(title: "Sessão do navegador", selection: Binding(get: { options.cookieBrowser.rawValue }, set: { options.cookieBrowser = CookieBrowser(rawValue: $0) ?? .none }), values: CookieBrowser.allCases.map(\.rawValue), label: { CookieBrowser(rawValue: $0)?.label ?? $0 })
-                    Text("Para Stories públicos ou protegidos, escolha o navegador em que o Instagram está aberto e autenticado. A sessão permanece no Mac.")
+                    Text("Use a aba Instagram para conectar uma conta e escolher Stories individualmente. A sessão própria do Instaloader permanece no Mac.")
                         .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 OptionMenu(title: "Formato", selection: $options.container,
@@ -414,12 +428,12 @@ struct ContentView: View {
         let requestedURL = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: requestedURL), InstagramCommand.username(for: requestedURL) != nil else { return }
         pendingInstagramURL = url.absoluteString
-        storyItems = []; selectedStoryIDs = []; storyError = ""; loadingStories = options.cookieBrowser == .none; showStoryPicker = true
-        guard options.cookieBrowser != .none else {
-            storyError = "Selecione Safari, Google Chrome ou Firefox em Sessão do navegador para listar Stories."
+        storyItems = []; selectedStoryIDs = []; storyError = ""; loadingStories = !manager.instagramSessionUsername.isEmpty; showStoryPicker = true
+        guard !manager.instagramSessionUsername.isEmpty else {
+            storyError = "Conecte sua conta do Instagram antes de listar Stories."
             return
         }
-        manager.loadInstagramStories(url: requestedURL, options: options) { items, error in
+        manager.loadInstagramStories(url: requestedURL) { items, error in
             storyItems = items
             let requestedID = InstagramCommand.storyID(for: requestedURL)
             selectedStoryIDs = requestedID.map { Set([$0]) } ?? Set(items.map(\.id))
@@ -484,6 +498,67 @@ private struct JobRow: View {
                 } label: { Image(systemName: "folder").frame(width: 28, height: 28) }.buttonStyle(.borderless).help("Mostrar no Finder").accessibilityLabel("Mostrar no Finder")
             }
         }.padding(.vertical, 16)
+    }
+}
+
+private struct InstagramLoginSheet: View {
+    @ObservedObject var manager: DownloadManager
+    let close: () -> Void
+    @State private var username = ""
+    @State private var password = ""
+    @State private var code = ""
+    @State private var needsTwoFactor = false
+    @State private var busy = false
+    @State private var error = ""
+
+    private var canSubmit: Bool {
+        needsTwoFactor ? !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty : !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Conectar Instagram").font(.system(size: 24, weight: .semibold))
+                    Text(needsTwoFactor ? "Digite o código enviado pelo Instagram." : "A conexão é feita diretamente pelo Instaloader.").font(.system(size: 13)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Cancelar", action: close).keyboardShortcut(.cancelAction)
+            }
+            if needsTwoFactor {
+                TextField("Código de autenticação", text: $code).textFieldStyle(.roundedBorder).font(.system(size: 14))
+                    .onSubmit { submit() }
+            } else {
+                TextField("Usuário do Instagram", text: $username).textFieldStyle(.roundedBorder).font(.system(size: 14))
+                SecureField("Senha", text: $password).textFieldStyle(.roundedBorder).font(.system(size: 14))
+            }
+            if !error.isEmpty { Label(error, systemImage: "exclamationmark.circle").font(.system(size: 12)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+            Text("A senha é enviada apenas ao processo local do Instaloader para autenticar. Depois, o app guarda somente o arquivo de sessão local com permissões restritas.")
+                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(needsTwoFactor ? "Confirmar código" : "Entrar", action: submit)
+                    .modifier(GlassAction(prominent: true)).disabled(!canSubmit || busy)
+            }
+        }
+        .padding(28).frame(width: 520).preferredColorScheme(.dark)
+    }
+
+    private func submit() {
+        error = ""; busy = true
+        if needsTwoFactor {
+            manager.submitInstagramTwoFactor(code: code) { result in
+                if case .failed(let message) = result { error = message; busy = false }
+            }
+        } else {
+            manager.loginInstagram(username: username, password: password) { result in
+                switch result {
+                case .twoFactorRequired: needsTwoFactor = true; busy = false
+                case .authenticated: password = ""; busy = false; close()
+                case .failed(let message): error = message; busy = false
+                }
+            }
+        }
     }
 }
 

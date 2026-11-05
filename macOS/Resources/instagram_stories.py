@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""List and download selected Instagram stories using the bundled Instaloader."""
+"""Authenticate, list and download Instagram stories with a local Instaloader session."""
 
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import instaloader
-from instaloader.__main__ import get_cookies_from_instagram
+from instaloader.exceptions import TwoFactorAuthRequiredException
 
 
-def build_loader(browser: str | None, output: str | None = None) -> instaloader.Instaloader:
-    loader = instaloader.Instaloader(
+def make_loader(output: str | None = None) -> instaloader.Instaloader:
+    return instaloader.Instaloader(
         sleep=False,
         quiet=True,
         dirname_pattern=output or "{target}",
@@ -22,12 +21,12 @@ def build_loader(browser: str | None, output: str | None = None) -> instaloader.
         compress_json=False,
         storyitem_metadata_txt_pattern="",
     )
-    if browser and browser != "none":
-        cookies = get_cookies_from_instagram("instagram", browser)
-        loader.context.update_cookies(cookies)
-        if not loader.test_login():
-            raise RuntimeError(f"Não foi possível autenticar no Instagram usando {browser}.")
-    return loader
+
+
+def load_session(loader: instaloader.Instaloader, username: str, session_file: str) -> None:
+    loader.load_session_from_file(username, session_file)
+    if not loader.test_login():
+        raise RuntimeError("A sessão salva do Instagram expirou. Conecte a conta novamente.")
 
 
 def story_items(loader: instaloader.Instaloader, username: str):
@@ -49,17 +48,36 @@ def item_json(item) -> dict:
     }
 
 
+def login(args) -> int:
+    payload = json.loads(sys.stdin.readline() or "{}")
+    loader = make_loader()
+    try:
+        loader.login(args.username, payload.get("password", ""))
+    except TwoFactorAuthRequiredException:
+        print(json.dumps({"status": "two_factor_required"}), flush=True)
+        payload = json.loads(sys.stdin.readline() or "{}")
+        loader.two_factor_login(payload.get("code", ""))
+    loader.save_session_to_file(args.session_file)
+    print(json.dumps({"status": "authenticated", "username": args.username}), flush=True)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=("list", "download"), required=True)
+    parser.add_argument("--mode", choices=("login", "list", "download"), required=True)
     parser.add_argument("--username", required=True)
-    parser.add_argument("--browser", default="none")
+    parser.add_argument("--session-username")
+    parser.add_argument("--session-file", required=True)
     parser.add_argument("--output")
     parser.add_argument("--id", dest="ids", action="append", default=[])
     args = parser.parse_args()
 
     try:
-        loader = build_loader(args.browser, args.output)
+        if args.mode == "login":
+            return login(args)
+
+        loader = make_loader(args.output)
+        load_session(loader, args.session_username or args.username, args.session_file)
         items = story_items(loader, args.username)
         if args.mode == "list":
             print(json.dumps({"username": args.username, "items": [item_json(item) for item in items]}, ensure_ascii=False))

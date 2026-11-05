@@ -48,6 +48,13 @@ struct DownloadOptions {
     var fps = "any"
     var selector = ""
     var cookieBrowser: CookieBrowser = .none
+    var instagramSessionUsername = ""
+}
+
+enum InstagramLoginEvent {
+    case twoFactorRequired
+    case authenticated(String)
+    case failed(String)
 }
 
 struct InstagramStory: Identifiable, Codable, Equatable {
@@ -218,8 +225,20 @@ struct DownloadJob: Identifiable {
     @Published var formatTitle = ""
     @Published var formatError = ""
     @Published var loadingFormats = false
+    @Published private(set) var instagramSessionUsername = ""
     private var probe: Process?
     private var storyProbe: Process?
+    private var instagramLoginProcess: Process?
+    private var instagramLoginInput: FileHandle?
+    private var instagramLoginBuffer = Data()
+    private let instagramSessionDirectory: URL
+
+    init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        instagramSessionDirectory = appSupport.appendingPathComponent("YTDLP Studio/Instagram", isDirectory: true)
+        let accountFile = instagramSessionDirectory.appendingPathComponent("account.txt")
+        instagramSessionUsername = (try? String(contentsOf: accountFile, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
     var activeCount: Int { jobs.filter(\.isActive).count }
     var queuedCount: Int { jobs.filter { $0.status == "Na fila" }.count }
     var doneCount: Int { jobs.filter { $0.status == "Concluído" }.count }
@@ -243,6 +262,91 @@ struct DownloadJob: Identifiable {
         startNext()
     }
 
+    func instagramSessionPath(for username: String) -> String {
+        instagramSessionDirectory.appendingPathComponent("\(username).session").path
+    }
+
+    func loginInstagram(username: String, password: String, completion: @escaping (InstagramLoginEvent) -> Void) {
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanUsername.isEmpty, !password.isEmpty,
+              let script = Bundle.main.resourceURL?.appendingPathComponent("instagram_stories.py") else {
+            completion(.failed("Informe o usuário e a senha do Instagram."))
+            return
+        }
+        let process = Process(), input = Pipe(), output = Pipe()
+        instagramLoginProcess = process
+        instagramLoginInput = input.fileHandleForWriting
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", script.path, "--mode", "login", "--username", cleanUsername,
+                             "--session-file", instagramSessionPath(for: cleanUsername)]
+        process.environment = Self.environment
+        process.standardInput = input; process.standardOutput = output; process.standardError = output
+        do {
+            try FileManager.default.createDirectory(at: instagramSessionDirectory, withIntermediateDirectories: true)
+            try process.run()
+            sendInstagramLoginPayload(["password": password])
+            output.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if !data.isEmpty { DispatchQueue.main.async { self.consumeInstagramLoginData(data, process: process, completion: completion) } }
+            }
+            DispatchQueue.global(qos: .utility).async {
+                process.waitUntilExit()
+                DispatchQueue.main.async {
+                    output.fileHandleForReading.readabilityHandler = nil
+                    if process.terminationStatus != 0 && self.instagramLoginProcess != nil {
+                        self.finishInstagramLogin(.failed("Não foi possível conectar ao Instagram."), completion: completion)
+                    }
+                }
+            }
+        } catch {
+            finishInstagramLogin(.failed(error.localizedDescription), completion: completion)
+        }
+    }
+
+    func submitInstagramTwoFactor(code: String, completion: @escaping (InstagramLoginEvent) -> Void) {
+        guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            completion(.failed("Informe o código de autenticação.")); return
+        }
+        sendInstagramLoginPayload(["code": code.trimmingCharacters(in: .whitespacesAndNewlines)])
+        _ = completion
+    }
+
+    private func sendInstagramLoginPayload(_ payload: [String: String]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              var line = String(data: data, encoding: .utf8)?.data(using: .utf8) else { return }
+        line.append(10)
+        try? instagramLoginInput?.write(contentsOf: line)
+    }
+
+    private func consumeInstagramLoginData(_ data: Data, process: Process, completion: @escaping (InstagramLoginEvent) -> Void) {
+        instagramLoginBuffer.append(data)
+        while let end = instagramLoginBuffer.firstIndex(of: 10) {
+            let lineData = instagramLoginBuffer.prefix(upTo: end)
+            instagramLoginBuffer.removeSubrange(...end)
+            let line = String(decoding: lineData, as: UTF8.self)
+            if let payload = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+               let status = payload["status"] as? String {
+                if status == "two_factor_required" { completion(.twoFactorRequired) }
+                if status == "authenticated", let username = payload["username"] as? String {
+                    instagramSessionUsername = username
+                    try? FileManager.default.createDirectory(at: instagramSessionDirectory, withIntermediateDirectories: true)
+                    try? username.write(to: instagramSessionDirectory.appendingPathComponent("account.txt"), atomically: true, encoding: .utf8)
+                    finishInstagramLogin(.authenticated(username), completion: completion)
+                }
+            } else if line.hasPrefix("ERROR:") {
+                finishInstagramLogin(.failed(String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)), completion: completion)
+            }
+        }
+        _ = process
+    }
+
+    private func finishInstagramLogin(_ result: InstagramLoginEvent, completion: @escaping (InstagramLoginEvent) -> Void) {
+        instagramLoginInput = nil
+        instagramLoginProcess = nil
+        instagramLoginBuffer = Data()
+        completion(result)
+    }
+
     func cancel(_ job: DownloadJob) {
         guard let i = jobs.firstIndex(where: { $0.id == job.id }) else { return }
         if jobs[i].status == "Na fila" { jobs[i].status = "Cancelado" }
@@ -260,7 +364,8 @@ struct DownloadJob: Identifiable {
         if !job.instagramStoryIDs.isEmpty, let username = InstagramCommand.username(for: job.url) {
             let temporaryDirectory = instagramTemporaryDirectory(for: job)
             let args = ["--mode", "download", "--username", username,
-                        "--browser", job.options.cookieBrowser.rawValue,
+                        "--session-username", job.options.instagramSessionUsername,
+                        "--session-file", instagramSessionPath(for: job.options.instagramSessionUsername),
                         "--output", temporaryDirectory] + job.instagramStoryIDs.flatMap { ["--id", $0] }
             launchInstagram(job, arguments: args)
             return
@@ -413,7 +518,15 @@ struct DownloadJob: Identifiable {
         startNext()
     }
 
-    func loadInstagramStories(url: String, options: DownloadOptions,
+    func loadInstagramStories(url: String, completion: @escaping ([InstagramStory], String?) -> Void) {
+        guard !instagramSessionUsername.isEmpty else {
+            completion([], "Conecte sua conta do Instagram antes de listar Stories.")
+            return
+        }
+        loadInstagramStories(url: url, sessionUsername: instagramSessionUsername, completion: completion)
+    }
+
+    private func loadInstagramStories(url: String, sessionUsername: String,
                               completion: @escaping ([InstagramStory], String?) -> Void) {
         guard let username = InstagramCommand.username(for: url),
               let script = Bundle.main.resourceURL?.appendingPathComponent("instagram_stories.py") else {
@@ -424,7 +537,8 @@ struct DownloadJob: Identifiable {
         storyProbe = process
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["python3", script.path, "--mode", "list", "--username", username,
-                             "--browser", options.cookieBrowser.rawValue]
+                             "--session-username", sessionUsername,
+                             "--session-file", instagramSessionPath(for: sessionUsername)]
         process.environment = Self.environment
         process.standardOutput = pipe; process.standardError = pipe
         do {
