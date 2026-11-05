@@ -515,6 +515,13 @@ private struct InstagramLoginSheet: View {
         needsTwoFactor ? !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty : !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
     }
 
+    private var checkpointURL: URL? {
+        guard let start = error.range(of: "/auth_platform/") else { return nil }
+        let suffix = error[start.lowerBound...]
+        let end = suffix.firstIndex(where: { $0 == " " || $0 == "\n" || $0 == "\r" }) ?? suffix.endIndex
+        return URL(string: "https://www.instagram.com" + suffix[..<end])
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
@@ -532,7 +539,20 @@ private struct InstagramLoginSheet: View {
                 TextField("Usuário do Instagram", text: $username).textFieldStyle(.roundedBorder).font(.system(size: 14))
                 SecureField("Senha", text: $password).textFieldStyle(.roundedBorder).font(.system(size: 14))
             }
-            if !error.isEmpty { Label(error, systemImage: "exclamationmark.circle").font(.system(size: 12)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+            if !error.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("O Instagram pediu uma verificação", systemImage: "exclamationmark.circle")
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.orange)
+                    Text(error).font(.system(size: 11)).foregroundStyle(.orange).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let checkpointURL {
+                        Button("Copiar link de verificação") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(checkpointURL.absoluteString, forType: .string)
+                        }.buttonStyle(.borderless).font(.system(size: 12, weight: .medium))
+                    }
+                }
+            }
             Text("A senha é enviada apenas ao processo local do Instaloader para autenticar. Depois, o app guarda somente o arquivo de sessão local com permissões restritas.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
