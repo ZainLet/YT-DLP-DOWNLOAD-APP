@@ -99,6 +99,8 @@ struct ContentView: View {
     @State private var filter = "Todos"
     @State private var showFormats = false
     @State private var showStoryPicker = false
+    @State private var instagramURL = ""
+    @State private var pendingInstagramURL = ""
     @State private var storyItems: [InstagramStory] = []
     @State private var selectedStoryIDs: Set<String> = []
     @State private var loadingStories = false
@@ -116,6 +118,7 @@ struct ContentView: View {
             else { WindowBackdrop().ignoresSafeArea(); Color.black.opacity(0.64).ignoresSafeArea().allowsHitTesting(false) }
             TabView(selection: $selectedTab) {
                 downloadPage.tabItem { Label("Baixar", systemImage: "arrow.down.to.line") }.tag(0)
+                instagramPage.tabItem { Label("Instagram", systemImage: "camera") }.tag(3)
                 activityPage.tabItem { Label("Atividade", systemImage: "waveform.path") }.tag(1)
                 completedPage.tabItem { Label("Concluídos", systemImage: "checkmark.circle") }.tag(2)
             }
@@ -137,9 +140,10 @@ struct ContentView: View {
                                       cancel: { showStoryPicker = false },
                                       download: {
                                           let selected = storyItems.filter { selectedStoryIDs.contains($0.id) }
-                                          if let first = links.first {
-                                              manager.addInstagramStories(selected, url: first, options: options, directory: directory)
-                                              urls = ""
+                                          if !pendingInstagramURL.isEmpty {
+                                              manager.addInstagramStories(selected, url: pendingInstagramURL, options: options, directory: directory)
+                                              instagramURL = ""
+                                              pendingInstagramURL = ""
                                               showStoryPicker = false
                                               selectedTab = 1
                                           }
@@ -169,6 +173,53 @@ struct ContentView: View {
                 .frame(maxWidth: 1140).padding(32).frame(maxWidth: .infinity)
             }.scrollContentBackground(.hidden)
         }
+    }
+
+    private var instagramPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                SectionTitle(title: "Stories, do seu jeito.", subtitle: "Liste o conteúdo disponível e escolha exatamente o que salvar.")
+                HStack(alignment: .top, spacing: 20) {
+                    Panel {
+                        VStack(alignment: .leading, spacing: 18) {
+                            Label("Link do Instagram", systemImage: "link").font(.system(size: 15, weight: .semibold))
+                            TextField("https://www.instagram.com/perfil/", text: $instagramURL)
+                                .textFieldStyle(.roundedBorder).font(.system(size: 14))
+                                .onSubmit { openInstagramPicker() }
+                            Text("Use um perfil ou um link direto de Story. O app exibirá a lista antes de iniciar o download.")
+                                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Button(action: openInstagramPicker) {
+                                HStack { Image(systemName: "list.bullet.rectangle"); Text("Listar Stories"); Spacer(); Text("⌘↵").font(.system(size: 11)).opacity(0.65) }
+                                    .frame(maxWidth: .infinity).padding(.vertical, 5)
+                            }.modifier(GlassAction(prominent: true)).controlSize(.large)
+                                .keyboardShortcut(.return, modifiers: .command)
+                                .disabled(!instagramURLIsValid)
+                        }
+                    }.frame(maxWidth: .infinity)
+                    Panel {
+                        VStack(alignment: .leading, spacing: 18) {
+                            Label("Acesso e destino", systemImage: "lock.shield").font(.system(size: 15, weight: .semibold))
+                            OptionMenu(title: "Sessão do navegador", selection: Binding(get: { options.cookieBrowser.rawValue }, set: { options.cookieBrowser = CookieBrowser(rawValue: $0) ?? .none }), values: CookieBrowser.allCases.map(\.rawValue), label: { CookieBrowser(rawValue: $0)?.label ?? $0 })
+                            Text("Para listar Stories, selecione um navegador em que o Instagram esteja autenticado. A sessão é lida localmente no Mac e não é enviada para nenhum servidor.")
+                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack { Label("Destino", systemImage: "folder").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary); Spacer(); Button("Alterar…", action: chooseFolder).buttonStyle(.borderless).font(.system(size: 12)) }
+                                TextField("Pasta de destino", text: $directory).textFieldStyle(.roundedBorder).font(.system(size: 12))
+                            }
+                        }
+                    }.frame(width: 296)
+                }
+                Panel {
+                    HStack(spacing: 14) {
+                        Image(systemName: "checklist").font(.system(size: 24, weight: .light)).foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Seleção antes do download").font(.system(size: 13, weight: .medium))
+                            Text("Depois da consulta, marque apenas os Stories que quer baixar. Perfis e links diretos usam o mesmo seletor.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }.frame(maxWidth: 1140, alignment: .leading).padding(32).frame(maxWidth: .infinity)
+        }.scrollContentBackground(.hidden)
     }
 
     private var composer: some View {
@@ -345,20 +396,36 @@ struct ContentView: View {
     private func add() {
         guard canAdd else { return }
         if links.count == 1, InstagramCommand.username(for: links[0]) != nil {
-            let requestedURL = links[0]
-            storyItems = []; selectedStoryIDs = []; storyError = ""; loadingStories = true; showStoryPicker = true
-            manager.loadInstagramStories(url: requestedURL, options: options) { items, error in
-                storyItems = items
-                let requestedID = InstagramCommand.storyID(for: requestedURL)
-                selectedStoryIDs = requestedID.map { Set([$0]) } ?? Set(items.map(\.id))
-                storyError = error ?? ""
-                loadingStories = false
-            }
+            openInstagramPicker(for: links[0])
             return
         }
         manager.add(urls: links, options: options, directory: directory)
         urls = ""
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 1)) { selectedTab = 1 }
+    }
+    private var instagramURLIsValid: Bool {
+        guard let url = URL(string: instagramURL.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+        return ["http", "https"].contains(url.scheme?.lowercased()) && InstagramCommand.username(for: url.absoluteString) != nil
+    }
+    private func openInstagramPicker() {
+        openInstagramPicker(for: instagramURL)
+    }
+    private func openInstagramPicker(for rawURL: String) {
+        let requestedURL = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: requestedURL), InstagramCommand.username(for: requestedURL) != nil else { return }
+        pendingInstagramURL = url.absoluteString
+        storyItems = []; selectedStoryIDs = []; storyError = ""; loadingStories = options.cookieBrowser == .none; showStoryPicker = true
+        guard options.cookieBrowser != .none else {
+            storyError = "Selecione Safari, Google Chrome ou Firefox em Sessão do navegador para listar Stories."
+            return
+        }
+        manager.loadInstagramStories(url: requestedURL, options: options) { items, error in
+            storyItems = items
+            let requestedID = InstagramCommand.storyID(for: requestedURL)
+            selectedStoryIDs = requestedID.map { Set([$0]) } ?? Set(items.map(\.id))
+            storyError = error ?? ""
+            loadingStories = false
+        }
     }
     private func chooseFolder() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
