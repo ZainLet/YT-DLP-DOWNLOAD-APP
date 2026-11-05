@@ -522,6 +522,10 @@ private struct InstagramLoginSheet: View {
         return URL(string: "https://www.instagram.com" + suffix[..<end])
     }
 
+    private var loginErrorTitle: String {
+        checkpointURL == nil ? "Não foi possível conectar" : "O Instagram pediu uma verificação"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
@@ -541,7 +545,7 @@ private struct InstagramLoginSheet: View {
             }
             if !error.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("O Instagram pediu uma verificação", systemImage: "exclamationmark.circle")
+                    Label(loginErrorTitle, systemImage: "exclamationmark.circle")
                         .font(.system(size: 12, weight: .medium)).foregroundStyle(.orange)
                     Text(error).font(.system(size: 11)).foregroundStyle(.orange).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
