@@ -32,6 +32,7 @@ if [ "${STUDIO_BUNDLE_TOOLS:-0}" = "1" ]; then
   for TOOL in "$CONTENTS/Resources/Tools/"*; do codesign --force --sign - "$TOOL"; done
   codesign --force --sign - "$CONTENTS/Resources/Python/bin/python3"
   find "$CONTENTS/Resources/Python" -type f -name '*.dylib' -exec codesign --force --sign - {} \;
+  cp "$ROOT/macOS/Resources/instagram_stories.py" "$CONTENTS/Resources/instagram_stories.py"
 fi
 plutil -lint "$CONTENTS/Info.plist"
 codesign --force --sign - "$APP"

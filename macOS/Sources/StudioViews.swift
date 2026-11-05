@@ -98,6 +98,11 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var filter = "Todos"
     @State private var showFormats = false
+    @State private var showStoryPicker = false
+    @State private var storyItems: [InstagramStory] = []
+    @State private var selectedStoryIDs: Set<String> = []
+    @State private var loadingStories = false
+    @State private var storyError = ""
     @State private var advanced = false
     @FocusState private var linksFocused: Bool
 
@@ -123,6 +128,22 @@ struct ContentView: View {
                 else { options.kind = .video; options.container = "auto" }
                 advanced = true
             }
+        }
+        .sheet(isPresented: $showStoryPicker, onDismiss: {
+            if loadingStories { manager.cancelStoryProbe(); loadingStories = false }
+        }) {
+            InstagramStoryPickerSheet(stories: storyItems, selectedIDs: $selectedStoryIDs,
+                                      loading: loadingStories, error: storyError,
+                                      cancel: { showStoryPicker = false },
+                                      download: {
+                                          let selected = storyItems.filter { selectedStoryIDs.contains($0.id) }
+                                          if let first = links.first {
+                                              manager.addInstagramStories(selected, url: first, options: options, directory: directory)
+                                              urls = ""
+                                              showStoryPicker = false
+                                              selectedTab = 1
+                                          }
+                                      })
         }
         .onReceive(NotificationCenter.default.publisher(for: .studioNavigate)) { notification in
             if let tab = notification.object as? Int { selectedTab = tab; if tab == 0 { linksFocused = true } }
@@ -323,6 +344,18 @@ struct ContentView: View {
     }
     private func add() {
         guard canAdd else { return }
+        if links.count == 1, InstagramCommand.username(for: links[0]) != nil {
+            let requestedURL = links[0]
+            storyItems = []; selectedStoryIDs = []; storyError = ""; loadingStories = true; showStoryPicker = true
+            manager.loadInstagramStories(url: requestedURL, options: options) { items, error in
+                storyItems = items
+                let requestedID = InstagramCommand.storyID(for: requestedURL)
+                selectedStoryIDs = requestedID.map { Set([$0]) } ?? Set(items.map(\.id))
+                storyError = error ?? ""
+                loadingStories = false
+            }
+            return
+        }
         manager.add(urls: links, options: options, directory: directory)
         urls = ""
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 1)) { selectedTab = 1 }
@@ -384,6 +417,73 @@ private struct JobRow: View {
                 } label: { Image(systemName: "folder").frame(width: 28, height: 28) }.buttonStyle(.borderless).help("Mostrar no Finder").accessibilityLabel("Mostrar no Finder")
             }
         }.padding(.vertical, 16)
+    }
+}
+
+private struct InstagramStoryPickerSheet: View {
+    let stories: [InstagramStory]
+    @Binding var selectedIDs: Set<String>
+    let loading: Bool
+    let error: String
+    let cancel: () -> Void
+    let download: () -> Void
+    private var allSelected: Bool { !stories.isEmpty && selectedIDs.count == stories.count }
+
+    private func storyDate(_ story: InstagramStory) -> String {
+        let date = Date(timeIntervalSince1970: story.timestamp)
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Escolha os Stories").font(.system(size: 24, weight: .semibold))
+                    Text("Marque somente as mídias que deseja salvar no Mac.").font(.system(size: 13)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Cancelar", action: cancel).keyboardShortcut(.cancelAction)
+            }
+            if loading {
+                VStack(spacing: 14) { ProgressView(); Text("Buscando Stories disponíveis…").foregroundStyle(.secondary) }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if !error.isEmpty && stories.isEmpty {
+                ContentUnavailableView("Não foi possível listar os Stories", systemImage: "camera.slash", description: Text(error))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HStack {
+                    Text("\(stories.count) \(stories.count == 1 ? "Story disponível" : "Stories disponíveis")")
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(allSelected ? "Desmarcar todos" : "Selecionar todos") {
+                        selectedIDs = allSelected ? [] : Set(stories.map(\.id))
+                    }.buttonStyle(.borderless).font(.system(size: 12))
+                }
+                List(stories) { story in
+                    Toggle(isOn: Binding(get: { selectedIDs.contains(story.id) }, set: { checked in
+                        if checked { selectedIDs.insert(story.id) } else { selectedIDs.remove(story.id) }
+                    })) {
+                        HStack(spacing: 12) {
+                            Image(systemName: story.kind == "Vídeo" ? "video" : "photo")
+                                .frame(width: 30, height: 30).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(story.kind).font(.system(size: 13, weight: .medium))
+                                Text(storyDate(story)).font(.system(size: 12)).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(story.shortcode).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                        }
+                    }.toggleStyle(.checkbox).padding(.vertical, 5)
+                }.listStyle(.inset)
+                HStack {
+                    if !error.isEmpty { Label(error, systemImage: "exclamationmark.circle").font(.system(size: 12)).foregroundStyle(.orange) }
+                    Spacer()
+                    Button("Baixar \(selectedIDs.count) selecionado\(selectedIDs.count == 1 ? "" : "s")", action: download)
+                        .modifier(GlassAction(prominent: true)).disabled(selectedIDs.isEmpty)
+                }
+            }
+        }
+        .padding(28).frame(width: 640, height: 540).preferredColorScheme(.dark)
     }
 }
 

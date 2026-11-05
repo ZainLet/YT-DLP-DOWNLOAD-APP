@@ -50,12 +50,37 @@ struct DownloadOptions {
     var cookieBrowser: CookieBrowser = .none
 }
 
+struct InstagramStory: Identifiable, Codable, Equatable {
+    let id: String
+    let shortcode: String
+    let date: String
+    let timestamp: Double
+    let kind: String
+}
+
+private struct InstagramStoryResponse: Codable {
+    let items: [InstagramStory]
+}
+
 enum InstagramTarget {
     case stories(username: String)
     case post(shortcode: String)
 }
 
 enum InstagramCommand {
+    static func username(for url: String) -> String? {
+        guard let target = target(for: url) else { return nil }
+        if case .stories(let username) = target { return username }
+        return nil
+    }
+
+    static func storyID(for url: String) -> String? {
+        guard let parsed = URL(string: url), let username = username(for: url) else { return nil }
+        let parts = parsed.path.split(separator: "/").map(String.init)
+        guard parts.first?.lowercased() == "stories", parts.count >= 3, parts[1] == username else { return nil }
+        return parts[2]
+    }
+
     static func target(for url: String) -> InstagramTarget? {
         guard let parsed = URL(string: url),
               let host = parsed.host?.lowercased(),
@@ -175,6 +200,7 @@ struct DownloadJob: Identifiable {
     let url: String
     let options: DownloadOptions
     let directory: String
+    var instagramStoryIDs: [String] = []
     var title = ""
     var status = "Na fila"
     var progress = 0.0
@@ -193,6 +219,7 @@ struct DownloadJob: Identifiable {
     @Published var formatError = ""
     @Published var loadingFormats = false
     private var probe: Process?
+    private var storyProbe: Process?
     var activeCount: Int { jobs.filter(\.isActive).count }
     var queuedCount: Int { jobs.filter { $0.status == "Na fila" }.count }
     var doneCount: Int { jobs.filter { $0.status == "Concluído" }.count }
@@ -204,6 +231,15 @@ struct DownloadJob: Identifiable {
     func add(urls: [String], options: DownloadOptions, directory: String) {
         let path = NSString(string: directory).expandingTildeInPath
         for url in urls { jobs.insert(DownloadJob(url: url, options: options, directory: path), at: 0) }
+        startNext()
+    }
+
+    func addInstagramStories(_ stories: [InstagramStory], url: String, options: DownloadOptions, directory: String) {
+        guard !stories.isEmpty else { return }
+        let path = NSString(string: directory).expandingTildeInPath
+        let job = DownloadJob(url: url, options: options, directory: path,
+                              instagramStoryIDs: stories.map(\.id))
+        jobs.insert(job, at: 0)
         startNext()
     }
 
@@ -221,6 +257,14 @@ struct DownloadJob: Identifiable {
     }
 
     private func launch(_ job: DownloadJob) {
+        if !job.instagramStoryIDs.isEmpty, let username = InstagramCommand.username(for: job.url) {
+            let temporaryDirectory = instagramTemporaryDirectory(for: job)
+            let args = ["--mode", "download", "--username", username,
+                        "--browser", job.options.cookieBrowser.rawValue,
+                        "--output", temporaryDirectory] + job.instagramStoryIDs.flatMap { ["--id", $0] }
+            launchInstagram(job, arguments: args)
+            return
+        }
         if let arguments = InstagramCommand.arguments(url: job.url, options: job.options,
                                                        outputDirectory: instagramTemporaryDirectory(for: job)) {
             launchInstagram(job, arguments: arguments)
@@ -269,7 +313,11 @@ struct DownloadJob: Identifiable {
         let process = Process(), pipe = Pipe()
         let temporaryDirectory = instagramTemporaryDirectory(for: job)
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", "-m", "instaloader"] + arguments
+        if arguments.first == "--mode", let script = Bundle.main.resourceURL?.appendingPathComponent("instagram_stories.py") {
+            process.arguments = ["python3", script.path] + arguments
+        } else {
+            process.arguments = ["python3", "-m", "instaloader"] + arguments
+        }
         process.environment = Self.environment
         process.currentDirectoryURL = URL(fileURLWithPath: job.directory)
         process.standardOutput = pipe; process.standardError = pipe
@@ -363,6 +411,53 @@ struct DownloadJob: Identifiable {
         if code != 0 && !cancelled && jobs[i].error.isEmpty { jobs[i].error = "Verifique o link e a disponibilidade do formato ou codec selecionado." }
         jobs[i].process = nil
         startNext()
+    }
+
+    func loadInstagramStories(url: String, options: DownloadOptions,
+                              completion: @escaping ([InstagramStory], String?) -> Void) {
+        guard let username = InstagramCommand.username(for: url),
+              let script = Bundle.main.resourceURL?.appendingPathComponent("instagram_stories.py") else {
+            completion([], "Este link não é um perfil ou Story do Instagram.")
+            return
+        }
+        let process = Process(), pipe = Pipe()
+        storyProbe = process
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", script.path, "--mode", "list", "--username", username,
+                             "--browser", options.cookieBrowser.rawValue]
+        process.environment = Self.environment
+        process.standardOutput = pipe; process.standardError = pipe
+        do {
+            try process.run()
+            DispatchQueue.global(qos: .utility).async {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                let output = String(decoding: data, as: UTF8.self)
+                DispatchQueue.main.async {
+                    self.storyProbe = nil
+                    guard process.terminationStatus == 0 else {
+                        let message = output.components(separatedBy: "ERROR:").last?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        completion([], message?.isEmpty == false ? message : "Não foi possível consultar os Stories disponíveis.")
+                        return
+                    }
+                    guard let jsonStart = output.firstIndex(of: "{"),
+                          let payload = output[jsonStart...].data(using: .utf8),
+                          let response = try? JSONDecoder().decode(InstagramStoryResponse.self, from: payload) else {
+                        completion([], "A resposta do Instagram não pôde ser interpretada.")
+                        return
+                    }
+                    completion(response.items, response.items.isEmpty ? "Nenhum Story disponível para este perfil." : nil)
+                }
+            }
+        } catch {
+            storyProbe = nil
+            completion([], error.localizedDescription)
+        }
+    }
+
+    func cancelStoryProbe() {
+        storyProbe?.terminate()
+        storyProbe = nil
     }
 
     func loadFormats(url: String, options: DownloadOptions = DownloadOptions()) {
