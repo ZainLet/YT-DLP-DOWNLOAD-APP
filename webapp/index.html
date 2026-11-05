@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#10131a" />
     <meta name="description" content="YTDLP Studio — downloads simples para você." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="app-icon.png" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
     <title>YTDLP Studio</title>
@@ -13,7 +16,7 @@
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="#download" aria-label="YTDLP Studio, início">
-          <span class="brand-mark" aria-hidden="true">↓</span>
+          <img class="brand-mark" src="app-icon.png" alt="" />
           <span>YTDLP <em>Studio</em></span>
         </a>
         <nav class="nav-pills" aria-label="Navegação principal">
@@ -102,7 +105,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="login-overlay is-hidden" id="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
       <form class="login-card" id="login-form">
-        <span class="brand-mark" aria-hidden="true">↓</span>
+        <img class="brand-mark" src="app-icon.png" alt="" />
         <p class="eyebrow">Acesso privado</p>
         <h2 id="login-title">Só para vocês.</h2>
         <p>Digite a senha para abrir o YTDLP Studio.</p>
