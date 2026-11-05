@@ -13,9 +13,6 @@ runs these as separate programs; their original licenses remain applicable.
 | libvorbis | 1.3.7 | [Xiph](https://downloads.xiph.org/releases/vorbis/) | BSD-style |
 | Opus | 1.5.2 | [Xiph](https://downloads.xiph.org/releases/opus/) | BSD-style and component notices |
 | Deno | 2.9.8 | [Deno](https://github.com/denoland/deno/releases/tag/v2.9.8) | MIT and third-party notices |
-| CPython standalone | 3.11.18 | [python-build-standalone](https://github.com/astral-sh/python-build-standalone) | PSF License |
-| Instaloader | 4.16 | [Instaloader](https://github.com/instaloader/instaloader) | MIT |
-| browser-cookie3 and runtime dependencies | pinned in `packaging/instaloader-requirements.txt` | [browser-cookie3](https://github.com/borisbabic/browser_cookie3) | LGPL-3.0 and component notices |
 
 Full notices are included under `YTDLP Studio.app/Contents/Resources/ThirdParty`.
 The matching FFmpeg, LAME, Ogg, Vorbis, Opus and yt-dlp source archives are

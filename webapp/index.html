@@ -10,6 +10,7 @@
     <link rel="apple-touch-icon" href="app-icon.png" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="instagram.css" />
     <title>YTDLP Studio</title>
   </head>
   <body>
@@ -21,6 +22,7 @@
         </a>
         <nav class="nav-pills" aria-label="Navegação principal">
           <button class="nav-pill is-active" data-view="download">Baixar</button>
+          <button class="nav-pill" data-view="instagram">Instagram</button>
           <button class="nav-pill" data-view="activity">Atividade <span class="nav-count" id="active-count">0</span></button>
           <button class="nav-pill" data-view="completed">Concluídos</button>
         </nav>
@@ -87,6 +89,21 @@
           </section>
         </section>
 
+        <section class="view" id="view-instagram" aria-labelledby="instagram-title">
+          <div class="page-heading"><p class="eyebrow">Instagram</p><h1 id="instagram-title">Stories,<br /><span>do seu jeito.</span></h1><p class="lede">Encontre o perfil e escolha as fotos e os vídeos que quer salvar.</p></div>
+          <form class="panel instagram-search" id="instagram-form">
+            <label for="instagram-profile">Perfil ou link de Story</label>
+            <div class="instagram-search-row"><input id="instagram-profile" type="text" placeholder="@usuario ou link do Instagram" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required /><button class="primary-button" id="instagram-list" type="submit">Listar Stories</button></div>
+            <p class="helper">Consulte os Stories ativos de perfis públicos, sem conectar sua conta do Instagram.</p>
+          </form>
+          <p id="instagram-message" class="instagram-message" role="status" aria-live="polite">Os Stories disponíveis aparecerão aqui para você escolher.</p>
+          <div id="instagram-results" class="is-hidden">
+            <div class="stories-toolbar"><div><h2 id="stories-title"></h2><p id="stories-count" class="lede"></p></div><button id="stories-select-all" class="secondary-button" type="button">Selecionar todos</button></div>
+            <div id="stories-grid" class="stories-grid"></div>
+            <div class="stories-save"><span id="stories-selection" aria-live="polite">Nenhum selecionado</span><button id="stories-download" class="primary-button" type="button" disabled>Baixar selecionados</button><small>Uma mídia é salva como foto ou vídeo. Várias mídias são reunidas em um ZIP.</small></div>
+          </div>
+        </section>
+
         <section class="view" id="view-activity" aria-labelledby="activity-title">
           <div class="page-heading"><p class="eyebrow">Acompanhe tudo</p><h1 id="activity-title">Cada download,<br /><span>no seu tempo.</span></h1><p class="lede">O que está baixando e o que vem a seguir.</p></div>
           <div class="stats"><div><strong id="stat-active">0</strong><span>Baixando</span></div><div><strong id="stat-queued">0</strong><span>Na fila</span></div><div><strong id="stat-done">0</strong><span>Concluídos</span></div></div>
@@ -116,7 +133,7 @@
       </form>
     </div>
     <script>
-      window.YTDLP_API_BASE = "https://ytdlp-backend-qrwm.onrender.com";
+      window.YTDLP_API_BASE = window.location.origin;
     </script>
     <script src="app.js"></script>
   </body>

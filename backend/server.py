@@ -7,13 +7,17 @@ import secrets
 import subprocess
 import time
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any
 
 from fastapi import Cookie, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from instagram import InstagramService, download_media
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
@@ -32,6 +36,8 @@ app.add_middleware(
 
 jobs: dict[str, dict[str, Any]] = {}
 job_tasks: dict[str, asyncio.Task] = {}
+job_slots = asyncio.Semaphore(2)
+instagram = InstagramService(os.environ.get("RAPIDAPI_KEY", ""), DATA_DIR)
 
 
 class LoginRequest(BaseModel):
@@ -47,6 +53,15 @@ class DownloadOptions(BaseModel):
 class DownloadRequest(BaseModel):
     links: list[str] = Field(min_length=1, max_length=5)
     options: DownloadOptions = Field(default_factory=DownloadOptions)
+
+
+class InstagramProfileRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=512)
+
+
+class InstagramDownloadRequest(BaseModel):
+    collectionId: str = Field(pattern=r"^[a-f0-9]{32}$")
+    storyIds: list[str] = Field(min_length=1, max_length=50)
 
 
 def _session_value() -> str:
@@ -89,6 +104,11 @@ def _command(job: dict[str, Any], destination: Path) -> list[str]:
 
 
 async def _run_job(job_id: str) -> None:
+    async with job_slots:
+        await _execute_job(job_id)
+
+
+async def _execute_job(job_id: str) -> None:
     job = jobs[job_id]
     destination = DATA_DIR / job_id
     destination.mkdir(parents=True, exist_ok=True)
@@ -136,7 +156,7 @@ async def health() -> dict[str, str]:
 async def login(payload: LoginRequest, response: Response) -> dict[str, bool]:
     if not APP_PASSWORD or not hmac.compare_digest(payload.password, APP_PASSWORD):
         raise HTTPException(status_code=401, detail="Senha incorreta")
-    response.set_cookie("ytdlp_session", _session_value(), httponly=True, secure=True, samesite="none", max_age=60 * 60 * 24 * 30)
+    response.set_cookie("ytdlp_session", _session_value(), httponly=True, secure=True, samesite="lax", max_age=60 * 60 * 24 * 30)
     return {"authenticated": True}
 
 
@@ -182,3 +202,87 @@ async def download_file(job_id: str, ytdlp_session: str | None = Cookie(default=
     if not path.is_file():
         raise HTTPException(status_code=410, detail="File is no longer available")
     return FileResponse(path, filename=job.get("fileName", path.name), media_type="application/octet-stream")
+
+
+@app.post("/api/instagram/stories")
+async def instagram_stories(payload: InstagramProfileRequest, ytdlp_session: str | None = Cookie(default=None)) -> dict:
+    require_auth(ytdlp_session)
+    return await instagram.list_stories(payload.username)
+
+
+@app.get("/api/instagram/collections/{collection_id}/stories/{story_id}/thumbnail")
+async def instagram_thumbnail(collection_id: str, story_id: str, ytdlp_session: str | None = Cookie(default=None)) -> FileResponse:
+    require_auth(ytdlp_session)
+    _, items = instagram.selected(collection_id, [story_id])
+    directory = DATA_DIR / "instagram-previews" / collection_id
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / f"{story_id}.jpg"
+    if not destination.is_file():
+        temporary = directory / f"{story_id}-{uuid.uuid4().hex}.part"
+        try:
+            await download_media(items[0]["thumbnail"], temporary, 5 * 1024 * 1024, image_only=True)
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return FileResponse(destination, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+
+async def _run_instagram_job(job_id: str, username: str, items: list[dict]) -> None:
+    job = jobs[job_id]
+    destination = DATA_DIR / job_id
+    destination.mkdir(parents=True, exist_ok=True)
+    async with job_slots:
+        job.update({"status": "active", "startedAt": int(time.time())})
+        files = []
+        try:
+            remaining = 500 * 1024 * 1024
+            for index, item in enumerate(items):
+                extension = "mp4" if item["kind"] == "video" else "jpg"
+                output = destination / f'{username}-story-{item["id"]}.{extension}'
+                remaining -= await download_media(item["media"], output, min(150 * 1024 * 1024, remaining))
+                files.append(output)
+                job["progress"] = min(99, int((index + 1) / len(items) * 100))
+            if len(files) > 1:
+                output = destination / f"{username}-{len(files)}-stories.zip"
+                def bundle():
+                    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
+                        for file in files:
+                            archive.write(file, arcname=file.name)
+                await asyncio.to_thread(bundle)
+                for file in files:
+                    file.unlink()
+            else:
+                output = files[0]
+            job.update({"status": "done", "progress": 100, "fileName": output.name, "path": str(output),
+                        "downloadUrl": f"/api/downloads/{job_id}/file"})
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except Exception as exc:
+            message = exc.detail if isinstance(exc, HTTPException) else "Não foi possível salvar os Stories. Tente consultar o perfil novamente."
+            job.update({"status": "error", "error": message})
+            for file in destination.iterdir():
+                if file.is_file():
+                    file.unlink()
+        finally:
+            job["finishedAt"] = int(time.time())
+
+
+@app.post("/api/instagram/downloads")
+async def create_instagram_download(payload: InstagramDownloadRequest, ytdlp_session: str | None = Cookie(default=None)) -> dict:
+    require_auth(ytdlp_session)
+    collection, items = instagram.selected(payload.collectionId, payload.storyIds)
+    job_id = uuid.uuid4().hex
+    count = len(items)
+    username = collection["username"]
+    job = {"id": job_id, "url": f"https://www.instagram.com/{username}/", "title": f"@{username} · {count} Stories",
+           "detail": "ZIP · Stories selecionados" if count > 1 else ("MP4 · Story" if items[0]["kind"] == "video" else "JPG · Story"),
+           "status": "queued", "progress": 0, "createdAt": int(time.time()), "path": None}
+    jobs[job_id] = job
+    job_tasks[job_id] = asyncio.create_task(_run_instagram_job(job_id, username, items))
+    return {"jobs": [_job_view(job)]}
+
+
+# Optional same-origin development server; production static files are hosted by Vercel.
+if os.environ.get("WEBAPP_DIR"):
+    app.mount("/", StaticFiles(directory=os.environ["WEBAPP_DIR"], html=True), name="webapp")

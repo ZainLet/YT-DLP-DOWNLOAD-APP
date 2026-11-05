@@ -82,8 +82,7 @@ Para controle completo, use **Formatos do link…** ou o **seletor yt-dlp** em o
 - A fila e o histórico são mantidos **apenas na sessão**. Fechar o app não preserva a lista; os arquivos já baixados permanecem no disco.
 - Cada link é tratado como um item; expansão automática de playlists está desativada.
 - A interface desta versão está em português; esta documentação também está disponível [em inglês](README.en.md).
-- Conteúdos com DRM, restrições regionais ou mudanças nos sites podem não funcionar. Para conteúdos que exigem login, abra as opções avançadas e selecione o navegador em que a sessão já está autenticada; o `yt-dlp` lê os cookies localmente no Mac.
-- Links do Instagram usam o Instaloader local para Stories, Destaques e mídia do Instagram; os demais sites continuam usando o `yt-dlp`.
+- Conteúdos com DRM, login obrigatório, restrições regionais ou mudanças nos sites podem não funcionar. Não há integração de login/cookies na interface.
 - Baixe apenas conteúdo que você possui ou tem autorização para salvar.
 
 ## Compilar a partir do código

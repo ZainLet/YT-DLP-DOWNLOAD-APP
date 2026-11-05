@@ -2,37 +2,14 @@ import Foundation
 import Combine
 
 enum MediaKind: String, CaseIterable { case video = "Vídeo", audio = "Áudio" }
-enum CookieBrowser: String, CaseIterable {
-    case none = "none"
-    case safari = "safari"
-    case chrome = "chrome"
-    case firefox = "firefox"
-
-    var label: String {
-        switch self {
-        case .none: "Não usar cookies"
-        case .safari: "Safari"
-        case .chrome: "Google Chrome"
-        case .firefox: "Firefox"
-        }
-    }
-}
 
 enum ToolRuntime {
     static var environment: [String: String] {
         var env = ProcessInfo.processInfo.environment
         let bundled = Bundle.main.resourceURL?.appendingPathComponent("Tools").path ?? ""
-        let bundledPython = Bundle.main.resourceURL?.appendingPathComponent("Python/bin").path ?? ""
         let tools = env["STUDIO_TOOL_DIR"] ?? bundled
         let fallback = env["STUDIO_TOOLS_ONLY"] == "1" ? "/usr/bin:/bin:/usr/sbin:/sbin" : "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        env["PATH"] = "\(bundledPython):\(tools):\(fallback)"
-        if let pythonRoot = Bundle.main.resourceURL?.appendingPathComponent("Python").path,
-           FileManager.default.fileExists(atPath: pythonRoot) {
-            env["PYTHONHOME"] = pythonRoot
-            env["PYTHONNOUSERSITE"] = "1"
-            env["PYTHONUNBUFFERED"] = "1"
-            env["PYTHONDONTWRITEBYTECODE"] = "1"
-        }
+        env["PATH"] = "\(tools):\(fallback)"
         env["DENO_NO_UPDATE_CHECK"] = "1"
         return env
     }
@@ -47,77 +24,6 @@ struct DownloadOptions {
     var audioQuality = "0"
     var fps = "any"
     var selector = ""
-    var cookieBrowser: CookieBrowser = .none
-    var instagramSessionUsername = ""
-}
-
-enum InstagramLoginEvent {
-    case twoFactorRequired
-    case authenticated(String)
-    case failed(String)
-}
-
-struct InstagramStory: Identifiable, Codable, Equatable {
-    let id: String
-    let shortcode: String
-    let date: String
-    let timestamp: Double
-    let kind: String
-}
-
-private struct InstagramStoryResponse: Codable {
-    let items: [InstagramStory]
-}
-
-enum InstagramTarget {
-    case stories(username: String)
-    case post(shortcode: String)
-}
-
-enum InstagramCommand {
-    static func username(for url: String) -> String? {
-        guard let target = target(for: url) else { return nil }
-        if case .stories(let username) = target { return username }
-        return nil
-    }
-
-    static func storyID(for url: String) -> String? {
-        guard let parsed = URL(string: url), let username = username(for: url) else { return nil }
-        let parts = parsed.path.split(separator: "/").map(String.init)
-        guard parts.first?.lowercased() == "stories", parts.count >= 3, parts[1] == username else { return nil }
-        return parts[2]
-    }
-
-    static func target(for url: String) -> InstagramTarget? {
-        guard let parsed = URL(string: url),
-              let host = parsed.host?.lowercased(),
-              ["instagram.com", "www.instagram.com", "m.instagram.com"].contains(host) else { return nil }
-        let parts = parsed.path.split(separator: "/").map(String.init)
-        guard let first = parts.first?.lowercased() else { return nil }
-        if first == "stories", parts.count >= 2, parts[1].lowercased() != "highlights" {
-            return .stories(username: parts[1])
-        }
-        if ["p", "reel", "reels", "tv"].contains(first), parts.count >= 2 {
-            return .post(shortcode: parts[1])
-        }
-        if !["accounts", "about", "direct", "explore", "privacy", "terms"].contains(first) {
-            return .stories(username: first)
-        }
-        return nil
-    }
-
-    static func arguments(url: String, options: DownloadOptions, outputDirectory: String) -> [String]? {
-        guard let target = target(for: url) else { return nil }
-        var args = ["--no-metadata-json", "--no-captions", "--dirname-pattern", outputDirectory]
-        if options.cookieBrowser != .none { args += ["--load-cookies", options.cookieBrowser.rawValue] }
-        switch target {
-        case .stories(let username):
-            args += ["--no-posts", "--no-profile-pic", "--no-video-thumbnails", "--stories", username]
-        case .post(let shortcode):
-            args += ["--", "-\(shortcode)"]
-        }
-        return args
-    }
 }
 
 enum DownloadCommand {
@@ -169,11 +75,7 @@ enum DownloadCommand {
             // Remux changes the container, not the encoded video. Unsupported pairs fail visibly.
             args += ["--remux-video", options.container]
         }
-        return authenticationArguments(options) + args + ["--", url]
-    }
-
-    static func authenticationArguments(_ options: DownloadOptions) -> [String] {
-        options.cookieBrowser == .none ? [] : ["--cookies-from-browser", options.cookieBrowser.rawValue]
+        return args + ["--", url]
     }
 }
 
@@ -207,7 +109,6 @@ struct DownloadJob: Identifiable {
     let url: String
     let options: DownloadOptions
     let directory: String
-    var instagramStoryIDs: [String] = []
     var title = ""
     var status = "Na fila"
     var progress = 0.0
@@ -225,20 +126,7 @@ struct DownloadJob: Identifiable {
     @Published var formatTitle = ""
     @Published var formatError = ""
     @Published var loadingFormats = false
-    @Published private(set) var instagramSessionUsername = ""
     private var probe: Process?
-    private var storyProbe: Process?
-    private var instagramLoginProcess: Process?
-    private var instagramLoginInput: FileHandle?
-    private var instagramLoginBuffer = Data()
-    private let instagramSessionDirectory: URL
-
-    init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        instagramSessionDirectory = appSupport.appendingPathComponent("YTDLP Studio/Instagram", isDirectory: true)
-        let accountFile = instagramSessionDirectory.appendingPathComponent("account.txt")
-        instagramSessionUsername = (try? String(contentsOf: accountFile, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
     var activeCount: Int { jobs.filter(\.isActive).count }
     var queuedCount: Int { jobs.filter { $0.status == "Na fila" }.count }
     var doneCount: Int { jobs.filter { $0.status == "Concluído" }.count }
@@ -251,100 +139,6 @@ struct DownloadJob: Identifiable {
         let path = NSString(string: directory).expandingTildeInPath
         for url in urls { jobs.insert(DownloadJob(url: url, options: options, directory: path), at: 0) }
         startNext()
-    }
-
-    func addInstagramStories(_ stories: [InstagramStory], url: String, options: DownloadOptions, directory: String) {
-        guard !stories.isEmpty else { return }
-        let path = NSString(string: directory).expandingTildeInPath
-        let job = DownloadJob(url: url, options: options, directory: path,
-                              instagramStoryIDs: stories.map(\.id))
-        jobs.insert(job, at: 0)
-        startNext()
-    }
-
-    func instagramSessionPath(for username: String) -> String {
-        instagramSessionDirectory.appendingPathComponent("\(username).session").path
-    }
-
-    func loginInstagram(username: String, password: String, completion: @escaping (InstagramLoginEvent) -> Void) {
-        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanUsername.isEmpty, !password.isEmpty,
-              let script = Bundle.main.resourceURL?.appendingPathComponent("instagram_stories.py") else {
-            completion(.failed("Informe o usuário e a senha do Instagram."))
-            return
-        }
-        let process = Process(), input = Pipe(), output = Pipe()
-        instagramLoginProcess = process
-        instagramLoginInput = input.fileHandleForWriting
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", script.path, "--mode", "login", "--username", cleanUsername,
-                             "--session-file", instagramSessionPath(for: cleanUsername)]
-        process.environment = Self.environment
-        process.standardInput = input; process.standardOutput = output; process.standardError = output
-        do {
-            try FileManager.default.createDirectory(at: instagramSessionDirectory, withIntermediateDirectories: true)
-            try process.run()
-            sendInstagramLoginPayload(["password": password])
-            output.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if !data.isEmpty { DispatchQueue.main.async { self.consumeInstagramLoginData(data, process: process, completion: completion) } }
-            }
-            DispatchQueue.global(qos: .utility).async {
-                process.waitUntilExit()
-                DispatchQueue.main.async {
-                    output.fileHandleForReading.readabilityHandler = nil
-                    if process.terminationStatus != 0 && self.instagramLoginProcess != nil {
-                        self.finishInstagramLogin(.failed("Não foi possível conectar ao Instagram."), completion: completion)
-                    }
-                }
-            }
-        } catch {
-            finishInstagramLogin(.failed(error.localizedDescription), completion: completion)
-        }
-    }
-
-    func submitInstagramTwoFactor(code: String, completion: @escaping (InstagramLoginEvent) -> Void) {
-        guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            completion(.failed("Informe o código de autenticação.")); return
-        }
-        sendInstagramLoginPayload(["code": code.trimmingCharacters(in: .whitespacesAndNewlines)])
-        _ = completion
-    }
-
-    private func sendInstagramLoginPayload(_ payload: [String: String]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: payload),
-              var line = String(data: data, encoding: .utf8)?.data(using: .utf8) else { return }
-        line.append(10)
-        try? instagramLoginInput?.write(contentsOf: line)
-    }
-
-    private func consumeInstagramLoginData(_ data: Data, process: Process, completion: @escaping (InstagramLoginEvent) -> Void) {
-        instagramLoginBuffer.append(data)
-        while let end = instagramLoginBuffer.firstIndex(of: 10) {
-            let lineData = instagramLoginBuffer.prefix(upTo: end)
-            instagramLoginBuffer.removeSubrange(...end)
-            let line = String(decoding: lineData, as: UTF8.self)
-            if let payload = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-               let status = payload["status"] as? String {
-                if status == "two_factor_required" { completion(.twoFactorRequired) }
-                if status == "authenticated", let username = payload["username"] as? String {
-                    instagramSessionUsername = username
-                    try? FileManager.default.createDirectory(at: instagramSessionDirectory, withIntermediateDirectories: true)
-                    try? username.write(to: instagramSessionDirectory.appendingPathComponent("account.txt"), atomically: true, encoding: .utf8)
-                    finishInstagramLogin(.authenticated(username), completion: completion)
-                }
-            } else if line.hasPrefix("ERROR:") {
-                finishInstagramLogin(.failed(String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)), completion: completion)
-            }
-        }
-        _ = process
-    }
-
-    private func finishInstagramLogin(_ result: InstagramLoginEvent, completion: @escaping (InstagramLoginEvent) -> Void) {
-        instagramLoginInput = nil
-        instagramLoginProcess = nil
-        instagramLoginBuffer = Data()
-        completion(result)
     }
 
     func cancel(_ job: DownloadJob) {
@@ -361,20 +155,6 @@ struct DownloadJob: Identifiable {
     }
 
     private func launch(_ job: DownloadJob) {
-        if !job.instagramStoryIDs.isEmpty, let username = InstagramCommand.username(for: job.url) {
-            let temporaryDirectory = instagramTemporaryDirectory(for: job)
-            let args = ["--mode", "download", "--username", username,
-                        "--session-username", job.options.instagramSessionUsername,
-                        "--session-file", instagramSessionPath(for: job.options.instagramSessionUsername),
-                        "--output", temporaryDirectory] + job.instagramStoryIDs.flatMap { ["--id", $0] }
-            launchInstagram(job, arguments: args)
-            return
-        }
-        if let arguments = InstagramCommand.arguments(url: job.url, options: job.options,
-                                                       outputDirectory: instagramTemporaryDirectory(for: job)) {
-            launchInstagram(job, arguments: arguments)
-            return
-        }
         let process = Process(), pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["yt-dlp"] + DownloadCommand.arguments(url: job.url, options: job.options)
@@ -410,91 +190,8 @@ struct DownloadJob: Identifiable {
         }
     }
 
-    private func instagramTemporaryDirectory(for job: DownloadJob) -> String {
-        (job.directory as NSString).appendingPathComponent(".ytdlp-studio-instagram-\(job.id.uuidString)")
-    }
-
-    private func launchInstagram(_ job: DownloadJob, arguments: [String]) {
-        let process = Process(), pipe = Pipe()
-        let temporaryDirectory = instagramTemporaryDirectory(for: job)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        if arguments.first == "--mode", let script = Bundle.main.resourceURL?.appendingPathComponent("instagram_stories.py") {
-            process.arguments = ["python3", script.path] + arguments
-        } else {
-            process.arguments = ["python3", "-m", "instaloader"] + arguments
-        }
-        process.environment = Self.environment
-        process.currentDirectoryURL = URL(fileURLWithPath: job.directory)
-        process.standardOutput = pipe; process.standardError = pipe
-        do {
-            try FileManager.default.createDirectory(atPath: job.directory, withIntermediateDirectories: true)
-            if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].process = process }
-            try process.run()
-            DispatchQueue.global(qos: .utility).async {
-                var buffer = Data()
-                while true {
-                    let data = pipe.fileHandleForReading.availableData
-                    if data.isEmpty { break }
-                    buffer.append(data)
-                    while let end = buffer.firstIndex(of: 10) {
-                        let line = String(decoding: buffer[..<end], as: UTF8.self)
-                        buffer.removeSubrange(...end)
-                        DispatchQueue.main.async { self.consume(line, id: job.id) }
-                    }
-                }
-                if !buffer.isEmpty {
-                    let line = String(decoding: buffer, as: UTF8.self)
-                    DispatchQueue.main.async { self.consume(line, id: job.id) }
-                }
-                process.waitUntilExit()
-                DispatchQueue.main.async {
-                    self.finishInstagram(job.id, code: process.terminationStatus, temporaryDirectory: temporaryDirectory)
-                }
-            }
-        } catch {
-            consume("ERROR: (error.localizedDescription)", id: job.id)
-            finish(job.id, code: 1)
-        }
-    }
-
-    private func finishInstagram(_ id: UUID, code: Int32, temporaryDirectory: String) {
-        if code == 0 {
-            let fileManager = FileManager.default
-            let mediaExtensions = Set(["jpg", "jpeg", "png", "mp4", "webm", "mkv"])
-            let files = (fileManager.enumerator(at: URL(fileURLWithPath: temporaryDirectory), includingPropertiesForKeys: [.isRegularFileKey])?.compactMap { item -> URL? in
-                guard let url = item as? URL, mediaExtensions.contains(url.pathExtension.lowercased()) else { return nil }
-                return url
-            } ?? []).sorted { $0.lastPathComponent < $1.lastPathComponent }
-            if files.isEmpty {
-                if let i = jobs.firstIndex(where: { $0.id == id }) { jobs[i].error = "O Instaloader não encontrou Stories disponíveis para esse perfil." }
-                finish(id, code: 1)
-                try? fileManager.removeItem(atPath: temporaryDirectory)
-                return
-            }
-            var copied: [URL] = []
-            guard let i = jobs.firstIndex(where: { $0.id == id }) else { return }
-            let destination = URL(fileURLWithPath: jobs[i].directory, isDirectory: true)
-            for source in files {
-                var target = destination.appendingPathComponent(source.lastPathComponent)
-                if fileManager.fileExists(atPath: target.path) {
-                    target = destination.appendingPathComponent("\(source.deletingPathExtension().lastPathComponent)-\(UUID().uuidString.prefix(6)).\(source.pathExtension)")
-                }
-                do { try fileManager.moveItem(at: source, to: target); copied.append(target) } catch { }
-            }
-            if let first = copied.first {
-                jobs[i].file = first.path
-                jobs[i].title = copied.count == 1 ? first.deletingPathExtension().lastPathComponent : "Instagram — \(copied.count) arquivos"
-            }
-        }
-        try? FileManager.default.removeItem(atPath: temporaryDirectory)
-        finish(id, code: code)
-    }
-
     private func consume(_ line: String, id: UUID) {
         guard let i = jobs.firstIndex(where: { $0.id == id }) else { return }
-        if !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, jobs[i].status == "Preparando" {
-            jobs[i].status = "Baixando"
-        }
         if line.hasPrefix("STUDIO_TITLE:") { jobs[i].title = String(line.dropFirst(13)) }
         if line.hasPrefix("STUDIO_FILE:") { jobs[i].file = String(line.dropFirst(12)) }
         if line.hasPrefix("STUDIO_PROGRESS:"), jobs[i].status != "Cancelando…" {
@@ -518,69 +215,13 @@ struct DownloadJob: Identifiable {
         startNext()
     }
 
-    func loadInstagramStories(url: String, completion: @escaping ([InstagramStory], String?) -> Void) {
-        guard !instagramSessionUsername.isEmpty else {
-            completion([], "Conecte sua conta do Instagram antes de listar Stories.")
-            return
-        }
-        loadInstagramStories(url: url, sessionUsername: instagramSessionUsername, completion: completion)
-    }
-
-    private func loadInstagramStories(url: String, sessionUsername: String,
-                              completion: @escaping ([InstagramStory], String?) -> Void) {
-        guard let username = InstagramCommand.username(for: url),
-              let script = Bundle.main.resourceURL?.appendingPathComponent("instagram_stories.py") else {
-            completion([], "Este link não é um perfil ou Story do Instagram.")
-            return
-        }
-        let process = Process(), pipe = Pipe()
-        storyProbe = process
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", script.path, "--mode", "list", "--username", username,
-                             "--session-username", sessionUsername,
-                             "--session-file", instagramSessionPath(for: sessionUsername)]
-        process.environment = Self.environment
-        process.standardOutput = pipe; process.standardError = pipe
-        do {
-            try process.run()
-            DispatchQueue.global(qos: .utility).async {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                let output = String(decoding: data, as: UTF8.self)
-                DispatchQueue.main.async {
-                    self.storyProbe = nil
-                    guard process.terminationStatus == 0 else {
-                        let message = output.components(separatedBy: "ERROR:").last?.trimmingCharacters(in: .whitespacesAndNewlines)
-                        completion([], message?.isEmpty == false ? message : "Não foi possível consultar os Stories disponíveis.")
-                        return
-                    }
-                    guard let jsonStart = output.firstIndex(of: "{"),
-                          let payload = output[jsonStart...].data(using: .utf8),
-                          let response = try? JSONDecoder().decode(InstagramStoryResponse.self, from: payload) else {
-                        completion([], "A resposta do Instagram não pôde ser interpretada.")
-                        return
-                    }
-                    completion(response.items, response.items.isEmpty ? "Nenhum Story disponível para este perfil." : nil)
-                }
-            }
-        } catch {
-            storyProbe = nil
-            completion([], error.localizedDescription)
-        }
-    }
-
-    func cancelStoryProbe() {
-        storyProbe?.terminate()
-        storyProbe = nil
-    }
-
-    func loadFormats(url: String, options: DownloadOptions = DownloadOptions()) {
+    func loadFormats(url: String) {
         guard !loadingFormats else { return }
         formats = []; formatError = ""; formatTitle = ""; loadingFormats = true
         let process = Process(), pipe = Pipe(), errors = Pipe()
         probe = process
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["yt-dlp"] + DownloadCommand.authenticationArguments(options) + ["--ignore-config", "--no-playlist", "--dump-single-json", "--skip-download", "--no-warnings", "--socket-timeout", "15", "--", url]
+        process.arguments = ["yt-dlp", "--ignore-config", "--no-playlist", "--dump-single-json", "--skip-download", "--no-warnings", "--socket-timeout", "15", "--", url]
         process.environment = Self.environment
         process.standardOutput = pipe; process.standardError = errors
         do {

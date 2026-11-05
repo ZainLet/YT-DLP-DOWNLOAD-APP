@@ -82,8 +82,7 @@ For full control, use **Formatos do link…** or the advanced **yt-dlp selector*
 - The queue and history are **session-only**. Quitting the app resets the list; downloaded files remain on disk.
 - Each link is handled as one item; automatic playlist expansion is disabled.
 - This version's interface is in Portuguese. The documentation is available in [Portuguese](README.md) and English.
-- DRM-protected media, regional restrictions, and changes to source websites may prevent downloads. For content that requires authentication, open the advanced options and select the browser where the session is already authenticated; `yt-dlp` reads those cookies locally on the Mac.
-- Instagram links use the bundled local Instaloader engine for Stories, Highlights, and Instagram media; other sites continue to use `yt-dlp`.
+- DRM-protected media, required logins, regional restrictions, and changes to source websites may prevent downloads. The UI does not include login/cookie integration.
 - Download only content you own or are authorized to save.
 
 ## Building from source

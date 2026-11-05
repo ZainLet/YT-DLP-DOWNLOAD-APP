@@ -1,31 +1,9 @@
 # YTDLP Studio Web
 
-Frontend responsivo para iPad, preparado para deploy como site estático na Vercel.
+Site privado responsivo para iPad, hospedado na Vercel (`ytdlp1/ytdlp`, raiz `webapp`, framework Other, sem build).
 
-## Estado atual
+Abas Baixar, Instagram, Atividade e Concluídos. No Instagram, informe um perfil público ou link de Story, liste as prévias e marque somente as mídias desejadas. Toque em Baixar selecionados e depois em Salvar na fila. Uma seleção múltipla é entregue como ZIP.
 
-- Interface baseada no YTDLP Studio nativo.
-- Layout adaptado para toque e telas pequenas.
-- Abas Baixar / Atividade / Concluídos.
-- Formulário de vídeo/áudio, formato, qualidade e opções avançadas.
-- Fila demonstrativa com progresso local.
-- Integração real ainda pendente: o frontend usa `demoMode` em `app.js` até existir um backend privado que execute `yt-dlp` e `FFmpeg`.
+`vercel.json` encaminha `/api/*` ao backend Render. A chave da RapidAPI fica exclusivamente nas variáveis do Render. Veja `../backend/README.md` para configuração, limites e testes.
 
-## Deploy na Vercel
-
-No projeto da Vercel, configure o diretório raiz como `webapp` e deixe o framework como **Other**. Não é necessário comando de build para esta primeira versão.
-
-## Contrato planejado do backend
-
-`POST /api/downloads`
-
-```json
-{
-  "links": ["https://..."],
-  "options": {"kind":"video","container":"mp4","quality":"1080p"}
-}
-```
-
-Resposta esperada: `{ "jobs": [{ "id": "...", "status": "queued" }] }`.
-
-Depois, o frontend poderá acompanhar cada item por `GET /api/downloads/:id` ou por SSE/WebSocket e receber uma URL temporária para o arquivo concluído.
+A integração do Instagram pertence apenas ao webapp. O app macOS mantém Baixar, Atividade e Concluídos com yt-dlp local.

@@ -98,14 +98,6 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var filter = "Todos"
     @State private var showFormats = false
-    @State private var showInstagramLogin = false
-    @State private var showStoryPicker = false
-    @State private var instagramURL = ""
-    @State private var pendingInstagramURL = ""
-    @State private var storyItems: [InstagramStory] = []
-    @State private var selectedStoryIDs: Set<String> = []
-    @State private var loadingStories = false
-    @State private var storyError = ""
     @State private var advanced = false
     @FocusState private var linksFocused: Bool
 
@@ -119,7 +111,6 @@ struct ContentView: View {
             else { WindowBackdrop().ignoresSafeArea(); Color.black.opacity(0.64).ignoresSafeArea().allowsHitTesting(false) }
             TabView(selection: $selectedTab) {
                 downloadPage.tabItem { Label("Baixar", systemImage: "arrow.down.to.line") }.tag(0)
-                instagramPage.tabItem { Label("Instagram", systemImage: "camera") }.tag(3)
                 activityPage.tabItem { Label("Atividade", systemImage: "waveform.path") }.tag(1)
                 completedPage.tabItem { Label("Concluídos", systemImage: "checkmark.circle") }.tag(2)
             }
@@ -132,28 +123,6 @@ struct ContentView: View {
                 else { options.kind = .video; options.container = "auto" }
                 advanced = true
             }
-        }
-        .sheet(isPresented: $showStoryPicker, onDismiss: {
-            if loadingStories { manager.cancelStoryProbe(); loadingStories = false }
-        }) {
-            InstagramStoryPickerSheet(stories: storyItems, selectedIDs: $selectedStoryIDs,
-                                      loading: loadingStories, error: storyError,
-                                      cancel: { showStoryPicker = false },
-                                      download: {
-                                          let selected = storyItems.filter { selectedStoryIDs.contains($0.id) }
-                                          if !pendingInstagramURL.isEmpty {
-                                              var instagramOptions = options
-                                              instagramOptions.instagramSessionUsername = manager.instagramSessionUsername
-                                              manager.addInstagramStories(selected, url: pendingInstagramURL, options: instagramOptions, directory: directory)
-                                              instagramURL = ""
-                                              pendingInstagramURL = ""
-                                              showStoryPicker = false
-                                              selectedTab = 1
-                                          }
-                                      })
-        }
-        .sheet(isPresented: $showInstagramLogin) {
-            InstagramLoginSheet(manager: manager) { showInstagramLogin = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: .studioNavigate)) { notification in
             if let tab = notification.object as? Int { selectedTab = tab; if tab == 0 { linksFocused = true } }
@@ -179,62 +148,6 @@ struct ContentView: View {
                 .frame(maxWidth: 1140).padding(32).frame(maxWidth: .infinity)
             }.scrollContentBackground(.hidden)
         }
-    }
-
-    private var instagramPage: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                SectionTitle(title: "Stories, do seu jeito.", subtitle: "Liste o conteúdo disponível e escolha exatamente o que salvar.")
-                HStack(alignment: .top, spacing: 20) {
-                    Panel {
-                        VStack(alignment: .leading, spacing: 18) {
-                            Label("Link do Instagram", systemImage: "link").font(.system(size: 15, weight: .semibold))
-                            TextField("https://www.instagram.com/perfil/", text: $instagramURL)
-                                .textFieldStyle(.roundedBorder).font(.system(size: 14))
-                                .onSubmit { openInstagramPicker() }
-                            Text("Use um perfil ou um link direto de Story. O app exibirá a lista antes de iniciar o download.")
-                                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                            Button(action: openInstagramPicker) {
-                                HStack { Image(systemName: "list.bullet.rectangle"); Text("Listar Stories"); Spacer(); Text("⌘↵").font(.system(size: 11)).opacity(0.65) }
-                                    .frame(maxWidth: .infinity).padding(.vertical, 5)
-                            }.modifier(GlassAction(prominent: true)).controlSize(.large)
-                                .keyboardShortcut(.return, modifiers: .command)
-                                .disabled(!instagramURLIsValid)
-                        }
-                    }.frame(maxWidth: .infinity)
-                    Panel {
-                        VStack(alignment: .leading, spacing: 18) {
-                            Label("Acesso e destino", systemImage: "lock.shield").font(.system(size: 15, weight: .semibold))
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(manager.instagramSessionUsername.isEmpty ? "Nenhuma conta conectada" : "@\(manager.instagramSessionUsername)")
-                                        .font(.system(size: 13, weight: .medium))
-                                    Text("Sessão local do Instaloader").font(.system(size: 11)).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Button(manager.instagramSessionUsername.isEmpty ? "Conectar…" : "Trocar…") { showInstagramLogin = true }
-                                    .buttonStyle(.borderless).font(.system(size: 12))
-                            }
-                            Text("A senha não é armazenada nem enviada para o backend. O Instaloader salva apenas a sessão local necessária para consultar Stories.")
-                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack { Label("Destino", systemImage: "folder").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary); Spacer(); Button("Alterar…", action: chooseFolder).buttonStyle(.borderless).font(.system(size: 12)) }
-                                TextField("Pasta de destino", text: $directory).textFieldStyle(.roundedBorder).font(.system(size: 12))
-                            }
-                        }
-                    }.frame(width: 296)
-                }
-                Panel {
-                    HStack(spacing: 14) {
-                        Image(systemName: "checklist").font(.system(size: 24, weight: .light)).foregroundStyle(Color.accentColor)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Seleção antes do download").font(.system(size: 13, weight: .medium))
-                            Text("Depois da consulta, marque apenas os Stories que quer baixar. Perfis e links diretos usam o mesmo seletor.").font(.system(size: 12)).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }.frame(maxWidth: 1140, alignment: .leading).padding(32).frame(maxWidth: .infinity)
-        }.scrollContentBackground(.hidden)
     }
 
     private var composer: some View {
@@ -263,7 +176,7 @@ struct ContentView: View {
                     Button { pasteLinks() } label: { Label("Colar links", systemImage: "doc.on.clipboard") }
                         .modifier(GlassAction()).controlSize(.large)
                     Spacer()
-                    Button { showFormats = true; if let first = links.first { manager.loadFormats(url: first, options: options) } } label: {
+                    Button { showFormats = true; if let first = links.first { manager.loadFormats(url: first) } } label: {
                         Label("Formatos do link…", systemImage: "slider.horizontal.3")
                     }.buttonStyle(.borderless).disabled(links.isEmpty || invalidLinks).help("Consultar todas as resoluções, formatos e codecs disponíveis no primeiro link")
                 }
@@ -284,11 +197,6 @@ struct ContentView: View {
                     Label("Vídeo", systemImage: "play.rectangle").tag(MediaKind.video)
                     Label("Áudio", systemImage: "music.note").tag(MediaKind.audio)
                 }.pickerStyle(.segmented).labelsHidden()
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Instagram e Stories", systemImage: "camera").font(.system(size: 12, weight: .semibold))
-                    Text("Use a aba Instagram para conectar uma conta e escolher Stories individualmente. A sessão própria do Instaloader permanece no Mac.")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
                 OptionMenu(title: "Formato", selection: $options.container,
                            values: options.kind == .video ? DownloadCommand.videoContainers : DownloadCommand.audioContainers,
                            label: { ["auto": "Original · sem remux", "best": "Original · melhor áudio", "vorbis": "OGG · Vorbis", "alac": "ALAC · sem perdas", "flac": "FLAC · sem perdas", "wav": "WAV · sem perdas"][$0] ?? $0.uppercased() })
@@ -409,37 +317,9 @@ struct ContentView: View {
     }
     private func add() {
         guard canAdd else { return }
-        if links.count == 1, InstagramCommand.username(for: links[0]) != nil {
-            openInstagramPicker(for: links[0])
-            return
-        }
         manager.add(urls: links, options: options, directory: directory)
         urls = ""
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 1)) { selectedTab = 1 }
-    }
-    private var instagramURLIsValid: Bool {
-        guard let url = URL(string: instagramURL.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
-        return ["http", "https"].contains(url.scheme?.lowercased()) && InstagramCommand.username(for: url.absoluteString) != nil
-    }
-    private func openInstagramPicker() {
-        openInstagramPicker(for: instagramURL)
-    }
-    private func openInstagramPicker(for rawURL: String) {
-        let requestedURL = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: requestedURL), InstagramCommand.username(for: requestedURL) != nil else { return }
-        pendingInstagramURL = url.absoluteString
-        storyItems = []; selectedStoryIDs = []; storyError = ""; loadingStories = !manager.instagramSessionUsername.isEmpty; showStoryPicker = true
-        guard !manager.instagramSessionUsername.isEmpty else {
-            storyError = "Conecte sua conta do Instagram antes de listar Stories."
-            return
-        }
-        manager.loadInstagramStories(url: requestedURL) { items, error in
-            storyItems = items
-            let requestedID = InstagramCommand.storyID(for: requestedURL)
-            selectedStoryIDs = requestedID.map { Set([$0]) } ?? Set(items.map(\.id))
-            storyError = error ?? ""
-            loadingStories = false
-        }
     }
     private func chooseFolder() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
@@ -498,158 +378,6 @@ private struct JobRow: View {
                 } label: { Image(systemName: "folder").frame(width: 28, height: 28) }.buttonStyle(.borderless).help("Mostrar no Finder").accessibilityLabel("Mostrar no Finder")
             }
         }.padding(.vertical, 16)
-    }
-}
-
-private struct InstagramLoginSheet: View {
-    @ObservedObject var manager: DownloadManager
-    let close: () -> Void
-    @State private var username = ""
-    @State private var password = ""
-    @State private var code = ""
-    @State private var needsTwoFactor = false
-    @State private var busy = false
-    @State private var error = ""
-
-    private var canSubmit: Bool {
-        needsTwoFactor ? !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty : !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
-    }
-
-    private var checkpointURL: URL? {
-        guard let start = error.range(of: "/auth_platform/") else { return nil }
-        let suffix = error[start.lowerBound...]
-        let end = suffix.firstIndex(where: { $0 == " " || $0 == "\n" || $0 == "\r" }) ?? suffix.endIndex
-        return URL(string: "https://www.instagram.com" + suffix[..<end])
-    }
-
-    private var loginErrorTitle: String {
-        checkpointURL == nil ? "Não foi possível conectar" : "O Instagram pediu uma verificação"
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Conectar Instagram").font(.system(size: 24, weight: .semibold))
-                    Text(needsTwoFactor ? "Digite o código enviado pelo Instagram." : "A conexão é feita diretamente pelo Instaloader.").font(.system(size: 13)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Cancelar", action: close).keyboardShortcut(.cancelAction)
-            }
-            if needsTwoFactor {
-                TextField("Código de autenticação", text: $code).textFieldStyle(.roundedBorder).font(.system(size: 14))
-                    .onSubmit { submit() }
-            } else {
-                TextField("Usuário do Instagram", text: $username).textFieldStyle(.roundedBorder).font(.system(size: 14))
-                SecureField("Senha", text: $password).textFieldStyle(.roundedBorder).font(.system(size: 14))
-            }
-            if !error.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(loginErrorTitle, systemImage: "exclamationmark.circle")
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.orange)
-                    Text(error).font(.system(size: 11)).foregroundStyle(.orange).textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let checkpointURL {
-                        Button("Copiar link de verificação") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(checkpointURL.absoluteString, forType: .string)
-                        }.buttonStyle(.borderless).font(.system(size: 12, weight: .medium))
-                    }
-                }
-            }
-            Text("A senha é enviada apenas ao processo local do Instaloader para autenticar. Depois, o app guarda somente o arquivo de sessão local com permissões restritas.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Spacer()
-                Button(needsTwoFactor ? "Confirmar código" : "Entrar", action: submit)
-                    .modifier(GlassAction(prominent: true)).disabled(!canSubmit || busy)
-            }
-        }
-        .padding(28).frame(width: 520).preferredColorScheme(.dark)
-    }
-
-    private func submit() {
-        error = ""; busy = true
-        if needsTwoFactor {
-            manager.submitInstagramTwoFactor(code: code) { result in
-                if case .failed(let message) = result { error = message; busy = false }
-            }
-        } else {
-            manager.loginInstagram(username: username, password: password) { result in
-                switch result {
-                case .twoFactorRequired: needsTwoFactor = true; busy = false
-                case .authenticated: password = ""; busy = false; close()
-                case .failed(let message): error = message; busy = false
-                }
-            }
-        }
-    }
-}
-
-private struct InstagramStoryPickerSheet: View {
-    let stories: [InstagramStory]
-    @Binding var selectedIDs: Set<String>
-    let loading: Bool
-    let error: String
-    let cancel: () -> Void
-    let download: () -> Void
-    private var allSelected: Bool { !stories.isEmpty && selectedIDs.count == stories.count }
-
-    private func storyDate(_ story: InstagramStory) -> String {
-        let date = Date(timeIntervalSince1970: story.timestamp)
-        return date.formatted(date: .abbreviated, time: .shortened)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Escolha os Stories").font(.system(size: 24, weight: .semibold))
-                    Text("Marque somente as mídias que deseja salvar no Mac.").font(.system(size: 13)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Cancelar", action: cancel).keyboardShortcut(.cancelAction)
-            }
-            if loading {
-                VStack(spacing: 14) { ProgressView(); Text("Buscando Stories disponíveis…").foregroundStyle(.secondary) }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if !error.isEmpty && stories.isEmpty {
-                ContentUnavailableView("Não foi possível listar os Stories", systemImage: "camera.slash", description: Text(error))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                HStack {
-                    Text("\(stories.count) \(stories.count == 1 ? "Story disponível" : "Stories disponíveis")")
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                    Spacer()
-                    Button(allSelected ? "Desmarcar todos" : "Selecionar todos") {
-                        selectedIDs = allSelected ? [] : Set(stories.map(\.id))
-                    }.buttonStyle(.borderless).font(.system(size: 12))
-                }
-                List(stories) { story in
-                    Toggle(isOn: Binding(get: { selectedIDs.contains(story.id) }, set: { checked in
-                        if checked { selectedIDs.insert(story.id) } else { selectedIDs.remove(story.id) }
-                    })) {
-                        HStack(spacing: 12) {
-                            Image(systemName: story.kind == "Vídeo" ? "video" : "photo")
-                                .frame(width: 30, height: 30).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(story.kind).font(.system(size: 13, weight: .medium))
-                                Text(storyDate(story)).font(.system(size: 12)).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(story.shortcode).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                        }
-                    }.toggleStyle(.checkbox).padding(.vertical, 5)
-                }.listStyle(.inset)
-                HStack {
-                    if !error.isEmpty { Label(error, systemImage: "exclamationmark.circle").font(.system(size: 12)).foregroundStyle(.orange) }
-                    Spacer()
-                    Button("Baixar \(selectedIDs.count) selecionado\(selectedIDs.count == 1 ? "" : "s")", action: download)
-                        .modifier(GlassAction(prominent: true)).disabled(selectedIDs.isEmpty)
-                }
-            }
-        }
-        .padding(28).frame(width: 640, height: 540).preferredColorScheme(.dark)
     }
 }
 

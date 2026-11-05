@@ -3,7 +3,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${1:-$ROOT/YTDLP Studio.app}"
 TOOLS="$APP/Contents/Resources/Tools"
-PYTHON="$APP/Contents/Resources/Python/bin/python3"
 codesign --verify --deep --strict "$APP"
 plutil -lint "$APP/Contents/Info.plist"
 for TOOL in yt-dlp ffmpeg ffprobe deno; do
@@ -13,8 +12,6 @@ for TOOL in yt-dlp ffmpeg ffprobe deno; do
     exit 1
   fi
 done
-test -x "$PYTHON"
-PYTHONDONTWRITEBYTECODE=1 "$PYTHON" -m instaloader --version
 "$TOOLS/yt-dlp" --version
 "$TOOLS/ffmpeg" -version | sed -n '1p'
 "$TOOLS/ffprobe" -version | sed -n '1p'
