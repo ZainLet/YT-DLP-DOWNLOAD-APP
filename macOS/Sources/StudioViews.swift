@@ -197,6 +197,12 @@ struct ContentView: View {
                     Label("Vídeo", systemImage: "play.rectangle").tag(MediaKind.video)
                     Label("Áudio", systemImage: "music.note").tag(MediaKind.audio)
                 }.pickerStyle(.segmented).labelsHidden()
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Instagram e Stories", systemImage: "camera").font(.system(size: 12, weight: .semibold))
+                    OptionMenu(title: "Sessão do navegador", selection: Binding(get: { options.cookieBrowser.rawValue }, set: { options.cookieBrowser = CookieBrowser(rawValue: $0) ?? .none }), values: CookieBrowser.allCases.map(\.rawValue), label: { CookieBrowser(rawValue: $0)?.label ?? $0 })
+                    Text("Para Stories públicos ou protegidos, escolha o navegador em que o Instagram está aberto e autenticado. A sessão permanece no Mac.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
                 OptionMenu(title: "Formato", selection: $options.container,
                            values: options.kind == .video ? DownloadCommand.videoContainers : DownloadCommand.audioContainers,
                            label: { ["auto": "Original · sem remux", "best": "Original · melhor áudio", "vorbis": "OGG · Vorbis", "alac": "ALAC · sem perdas", "flac": "FLAC · sem perdas", "wav": "WAV · sem perdas"][$0] ?? $0.uppercased() })
@@ -216,9 +222,6 @@ struct ContentView: View {
                             OptionMenu(title: "Quadros por segundo", selection: $options.fps, values: ["any", "120", "60", "50", "30", "25", "24"], label: { $0 == "any" ? "Automático" : "Até \($0) fps" })
                         }
                         OptionMenu(title: "Codec de áudio da fonte", selection: $options.audioCodec, values: DownloadCommand.audioCodecs, label: codecLabel)
-                        OptionMenu(title: "Cookies do navegador", selection: Binding(get: { options.cookieBrowser.rawValue }, set: { options.cookieBrowser = CookieBrowser(rawValue: $0) ?? .none }), values: CookieBrowser.allCases.map(\.rawValue), label: { CookieBrowser(rawValue: $0)?.label ?? $0 })
-                        Text("Para stories e conteúdos privados do Instagram, entre no navegador escolhido antes de baixar. Os cookies ficam no Mac e são usados apenas localmente.")
-                            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         VStack(alignment: .leading, spacing: 7) {
                             Text("Seletor yt-dlp (opcional)").font(.system(size: 12)).foregroundStyle(.secondary)
                             TextField("Ex.: 137+140 ou bv+ba/b", text: $options.selector).textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced))
