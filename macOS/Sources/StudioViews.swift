@@ -176,7 +176,7 @@ struct ContentView: View {
                     Button { pasteLinks() } label: { Label("Colar links", systemImage: "doc.on.clipboard") }
                         .modifier(GlassAction()).controlSize(.large)
                     Spacer()
-                    Button { showFormats = true; if let first = links.first { manager.loadFormats(url: first) } } label: {
+                    Button { showFormats = true; if let first = links.first { manager.loadFormats(url: first, options: options) } } label: {
                         Label("Formatos do link…", systemImage: "slider.horizontal.3")
                     }.buttonStyle(.borderless).disabled(links.isEmpty || invalidLinks).help("Consultar todas as resoluções, formatos e codecs disponíveis no primeiro link")
                 }
@@ -216,6 +216,9 @@ struct ContentView: View {
                             OptionMenu(title: "Quadros por segundo", selection: $options.fps, values: ["any", "120", "60", "50", "30", "25", "24"], label: { $0 == "any" ? "Automático" : "Até \($0) fps" })
                         }
                         OptionMenu(title: "Codec de áudio da fonte", selection: $options.audioCodec, values: DownloadCommand.audioCodecs, label: codecLabel)
+                        OptionMenu(title: "Cookies do navegador", selection: Binding(get: { options.cookieBrowser.rawValue }, set: { options.cookieBrowser = CookieBrowser(rawValue: $0) ?? .none }), values: CookieBrowser.allCases.map(\.rawValue), label: { CookieBrowser(rawValue: $0)?.label ?? $0 })
+                        Text("Para stories e conteúdos privados do Instagram, entre no navegador escolhido antes de baixar. Os cookies ficam no Mac e são usados apenas localmente.")
+                            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         VStack(alignment: .leading, spacing: 7) {
                             Text("Seletor yt-dlp (opcional)").font(.system(size: 12)).foregroundStyle(.secondary)
                             TextField("Ex.: 137+140 ou bv+ba/b", text: $options.selector).textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced))

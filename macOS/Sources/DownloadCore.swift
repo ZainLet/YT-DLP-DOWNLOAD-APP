@@ -2,6 +2,21 @@ import Foundation
 import Combine
 
 enum MediaKind: String, CaseIterable { case video = "Vídeo", audio = "Áudio" }
+enum CookieBrowser: String, CaseIterable {
+    case none = "none"
+    case safari = "safari"
+    case chrome = "chrome"
+    case firefox = "firefox"
+
+    var label: String {
+        switch self {
+        case .none: "Não usar cookies"
+        case .safari: "Safari"
+        case .chrome: "Google Chrome"
+        case .firefox: "Firefox"
+        }
+    }
+}
 
 enum ToolRuntime {
     static var environment: [String: String] {
@@ -24,6 +39,7 @@ struct DownloadOptions {
     var audioQuality = "0"
     var fps = "any"
     var selector = ""
+    var cookieBrowser: CookieBrowser = .none
 }
 
 enum DownloadCommand {
@@ -75,7 +91,11 @@ enum DownloadCommand {
             // Remux changes the container, not the encoded video. Unsupported pairs fail visibly.
             args += ["--remux-video", options.container]
         }
-        return args + ["--", url]
+        return authenticationArguments(options) + args + ["--", url]
+    }
+
+    static func authenticationArguments(_ options: DownloadOptions) -> [String] {
+        options.cookieBrowser == .none ? [] : ["--cookies-from-browser", options.cookieBrowser.rawValue]
     }
 }
 
@@ -215,13 +235,13 @@ struct DownloadJob: Identifiable {
         startNext()
     }
 
-    func loadFormats(url: String) {
+    func loadFormats(url: String, options: DownloadOptions = DownloadOptions()) {
         guard !loadingFormats else { return }
         formats = []; formatError = ""; formatTitle = ""; loadingFormats = true
         let process = Process(), pipe = Pipe(), errors = Pipe()
         probe = process
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["yt-dlp", "--ignore-config", "--no-playlist", "--dump-single-json", "--skip-download", "--no-warnings", "--socket-timeout", "15", "--", url]
+        process.arguments = ["yt-dlp"] + DownloadCommand.authenticationArguments(options) + ["--ignore-config", "--no-playlist", "--dump-single-json", "--skip-download", "--no-warnings", "--socket-timeout", "15", "--", url]
         process.environment = Self.environment
         process.standardOutput = pipe; process.standardError = errors
         do {

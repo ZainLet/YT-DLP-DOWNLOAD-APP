@@ -23,6 +23,9 @@ import Foundation
         check(Array(args.suffix(2)) == ["--", "https://example.com/video"], "URLs are separate arguments")
         options.kind = .video; options.container = "auto"
         check(!DownloadCommand.arguments(url: "https://example.com", options: options).contains("--remux-video"), "Original container")
+        options.cookieBrowser = .safari
+        let instagramArgs = DownloadCommand.arguments(url: "https://www.instagram.com/stories/example/", options: options)
+        check(instagramArgs.contains("--cookies-from-browser") && instagramArgs.contains("safari"), "Browser cookies")
         let videoOnly = SourceFormat.parse(["format_id": "137", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 1080])!
         check(videoOnly.selector == "137+ba", "Video-only format gets audio")
         check(SourceFormat.parse(["format_id": "sb", "vcodec": "none", "acodec": "none"]) == nil, "Storyboards are excluded")
