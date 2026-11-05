@@ -100,6 +100,18 @@
       <footer class="footer"><span>YTDLP Studio · uso privado</span><span>Feito para ser simples.</span></footer>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="login-overlay is-hidden" id="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <form class="login-card" id="login-form">
+        <span class="brand-mark" aria-hidden="true">↓</span>
+        <p class="eyebrow">Acesso privado</p>
+        <h2 id="login-title">Só para vocês.</h2>
+        <p>Digite a senha para abrir o YTDLP Studio.</p>
+        <label class="sr-only" for="login-password">Senha</label>
+        <input id="login-password" type="password" autocomplete="current-password" placeholder="Senha de acesso" required />
+        <button class="primary-button" type="submit"><span>Entrar</span><span class="button-arrow">↗</span></button>
+        <small id="login-error" class="login-error"></small>
+      </form>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>
