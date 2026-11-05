@@ -7,7 +7,6 @@ import secrets
 import subprocess
 import time
 import uuid
-import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -235,24 +234,14 @@ async def _run_instagram_job(job_id: str, username: str, items: list[dict]) -> N
         job.update({"status": "active", "startedAt": int(time.time())})
         files = []
         try:
-            remaining = 500 * 1024 * 1024
+            remaining = 150 * 1024 * 1024
             for index, item in enumerate(items):
                 extension = "mp4" if item["kind"] == "video" else "jpg"
                 output = destination / f'{username}-story-{item["id"]}.{extension}'
                 remaining -= await download_media(item["media"], output, min(150 * 1024 * 1024, remaining))
                 files.append(output)
                 job["progress"] = min(99, int((index + 1) / len(items) * 100))
-            if len(files) > 1:
-                output = destination / f"{username}-{len(files)}-stories.zip"
-                def bundle():
-                    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
-                        for file in files:
-                            archive.write(file, arcname=file.name)
-                await asyncio.to_thread(bundle)
-                for file in files:
-                    file.unlink()
-            else:
-                output = files[0]
+            output = files[0]
             job.update({"status": "done", "progress": 100, "fileName": output.name, "path": str(output),
                         "downloadUrl": f"/api/downloads/{job_id}/file"})
         except asyncio.CancelledError:
@@ -272,15 +261,17 @@ async def _run_instagram_job(job_id: str, username: str, items: list[dict]) -> N
 async def create_instagram_download(payload: InstagramDownloadRequest, ytdlp_session: str | None = Cookie(default=None)) -> dict:
     require_auth(ytdlp_session)
     collection, items = instagram.selected(payload.collectionId, payload.storyIds)
-    job_id = uuid.uuid4().hex
-    count = len(items)
     username = collection["username"]
-    job = {"id": job_id, "url": f"https://www.instagram.com/{username}/", "title": f"@{username} · {count} Stories",
-           "detail": "ZIP · Stories selecionados" if count > 1 else ("MP4 · Story" if items[0]["kind"] == "video" else "JPG · Story"),
-           "status": "queued", "progress": 0, "createdAt": int(time.time()), "path": None}
-    jobs[job_id] = job
-    job_tasks[job_id] = asyncio.create_task(_run_instagram_job(job_id, username, items))
-    return {"jobs": [_job_view(job)]}
+    created = []
+    for index, item in enumerate(items, start=1):
+        job_id = uuid.uuid4().hex
+        job = {"id": job_id, "url": f"https://www.instagram.com/{username}/", "title": f"@{username} · Story {index}",
+               "detail": "MP4 · Story" if item["kind"] == "video" else "JPG · Story",
+               "status": "queued", "progress": 0, "createdAt": int(time.time()), "path": None}
+        jobs[job_id] = job
+        job_tasks[job_id] = asyncio.create_task(_run_instagram_job(job_id, username, [item]))
+        created.append(_job_view(job))
+    return {"jobs": created}
 
 
 # Optional same-origin development server; production static files are hosted by Vercel.

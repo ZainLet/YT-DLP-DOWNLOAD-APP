@@ -1,9 +1,7 @@
 import asyncio
-import io
 import os
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -79,13 +77,15 @@ class InstagramChecks(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("SameSite=lax", login.headers["set-cookie"])
                 response = await client.post("/api/instagram/downloads", json={"collectionId": collection_id, "storyIds": ["1", "2"]})
                 self.assertEqual(response.status_code, 200)
-                job_id = response.json()["jobs"][0]["id"]
-                await server.job_tasks[job_id]
-                file = await client.get(f"/api/downloads/{job_id}/file")
-                self.assertEqual(file.status_code, 200)
-                with zipfile.ZipFile(io.BytesIO(file.content)) as archive:
-                    self.assertEqual(set(archive.namelist()), {"virginia-story-1.jpg", "virginia-story-2.mp4"})
-                    self.assertEqual(archive.read("virginia-story-2.mp4"), b"https://test.fbcdn.net/2")
+                created = response.json()["jobs"]
+                self.assertEqual(len(created), 2)
+                results = {}
+                for job in created:
+                    await server.job_tasks[job["id"]]
+                    file = await client.get(f'/api/downloads/{job["id"]}/file')
+                    self.assertEqual(file.status_code, 200)
+                    results[server.jobs[job["id"]]["fileName"]] = file.content
+                self.assertEqual(results, {"virginia-story-1.jpg": b"https://test.fbcdn.net/1", "virginia-story-2.mp4": b"https://test.fbcdn.net/2"})
                 single = await client.post("/api/instagram/downloads", json={"collectionId": collection_id, "storyIds": ["2"]})
                 single_id = single.json()["jobs"][0]["id"]
                 await server.job_tasks[single_id]
