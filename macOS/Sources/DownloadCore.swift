@@ -22,9 +22,17 @@ enum ToolRuntime {
     static var environment: [String: String] {
         var env = ProcessInfo.processInfo.environment
         let bundled = Bundle.main.resourceURL?.appendingPathComponent("Tools").path ?? ""
+        let bundledPython = Bundle.main.resourceURL?.appendingPathComponent("Python/bin").path ?? ""
         let tools = env["STUDIO_TOOL_DIR"] ?? bundled
         let fallback = env["STUDIO_TOOLS_ONLY"] == "1" ? "/usr/bin:/bin:/usr/sbin:/sbin" : "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        env["PATH"] = "\(tools):\(fallback)"
+        env["PATH"] = "\(bundledPython):\(tools):\(fallback)"
+        if let pythonRoot = Bundle.main.resourceURL?.appendingPathComponent("Python").path,
+           FileManager.default.fileExists(atPath: pythonRoot) {
+            env["PYTHONHOME"] = pythonRoot
+            env["PYTHONNOUSERSITE"] = "1"
+            env["PYTHONUNBUFFERED"] = "1"
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+        }
         env["DENO_NO_UPDATE_CHECK"] = "1"
         return env
     }
@@ -40,6 +48,44 @@ struct DownloadOptions {
     var fps = "any"
     var selector = ""
     var cookieBrowser: CookieBrowser = .none
+}
+
+enum InstagramTarget {
+    case stories(username: String)
+    case post(shortcode: String)
+}
+
+enum InstagramCommand {
+    static func target(for url: String) -> InstagramTarget? {
+        guard let parsed = URL(string: url),
+              let host = parsed.host?.lowercased(),
+              ["instagram.com", "www.instagram.com", "m.instagram.com"].contains(host) else { return nil }
+        let parts = parsed.path.split(separator: "/").map(String.init)
+        guard let first = parts.first?.lowercased() else { return nil }
+        if first == "stories", parts.count >= 2, parts[1].lowercased() != "highlights" {
+            return .stories(username: parts[1])
+        }
+        if ["p", "reel", "reels", "tv"].contains(first), parts.count >= 2 {
+            return .post(shortcode: parts[1])
+        }
+        if !["accounts", "about", "direct", "explore", "privacy", "terms"].contains(first) {
+            return .stories(username: first)
+        }
+        return nil
+    }
+
+    static func arguments(url: String, options: DownloadOptions, outputDirectory: String) -> [String]? {
+        guard let target = target(for: url) else { return nil }
+        var args = ["--no-metadata-json", "--no-captions", "--dirname-pattern", outputDirectory]
+        if options.cookieBrowser != .none { args += ["--load-cookies", options.cookieBrowser.rawValue] }
+        switch target {
+        case .stories(let username):
+            args += ["--no-posts", "--no-profile-pic", "--no-video-thumbnails", "--stories", username]
+        case .post(let shortcode):
+            args += ["--", "-\(shortcode)"]
+        }
+        return args
+    }
 }
 
 enum DownloadCommand {
@@ -175,6 +221,11 @@ struct DownloadJob: Identifiable {
     }
 
     private func launch(_ job: DownloadJob) {
+        if let arguments = InstagramCommand.arguments(url: job.url, options: job.options,
+                                                       outputDirectory: instagramTemporaryDirectory(for: job)) {
+            launchInstagram(job, arguments: arguments)
+            return
+        }
         let process = Process(), pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["yt-dlp"] + DownloadCommand.arguments(url: job.url, options: job.options)
@@ -210,8 +261,87 @@ struct DownloadJob: Identifiable {
         }
     }
 
+    private func instagramTemporaryDirectory(for job: DownloadJob) -> String {
+        (job.directory as NSString).appendingPathComponent(".ytdlp-studio-instagram-\(job.id.uuidString)")
+    }
+
+    private func launchInstagram(_ job: DownloadJob, arguments: [String]) {
+        let process = Process(), pipe = Pipe()
+        let temporaryDirectory = instagramTemporaryDirectory(for: job)
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-m", "instaloader"] + arguments
+        process.environment = Self.environment
+        process.currentDirectoryURL = URL(fileURLWithPath: job.directory)
+        process.standardOutput = pipe; process.standardError = pipe
+        do {
+            try FileManager.default.createDirectory(atPath: job.directory, withIntermediateDirectories: true)
+            if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].process = process }
+            try process.run()
+            DispatchQueue.global(qos: .utility).async {
+                var buffer = Data()
+                while true {
+                    let data = pipe.fileHandleForReading.availableData
+                    if data.isEmpty { break }
+                    buffer.append(data)
+                    while let end = buffer.firstIndex(of: 10) {
+                        let line = String(decoding: buffer[..<end], as: UTF8.self)
+                        buffer.removeSubrange(...end)
+                        DispatchQueue.main.async { self.consume(line, id: job.id) }
+                    }
+                }
+                if !buffer.isEmpty {
+                    let line = String(decoding: buffer, as: UTF8.self)
+                    DispatchQueue.main.async { self.consume(line, id: job.id) }
+                }
+                process.waitUntilExit()
+                DispatchQueue.main.async {
+                    self.finishInstagram(job.id, code: process.terminationStatus, temporaryDirectory: temporaryDirectory)
+                }
+            }
+        } catch {
+            consume("ERROR: (error.localizedDescription)", id: job.id)
+            finish(job.id, code: 1)
+        }
+    }
+
+    private func finishInstagram(_ id: UUID, code: Int32, temporaryDirectory: String) {
+        if code == 0 {
+            let fileManager = FileManager.default
+            let mediaExtensions = Set(["jpg", "jpeg", "png", "mp4", "webm", "mkv"])
+            let files = (fileManager.enumerator(at: URL(fileURLWithPath: temporaryDirectory), includingPropertiesForKeys: [.isRegularFileKey])?.compactMap { item -> URL? in
+                guard let url = item as? URL, mediaExtensions.contains(url.pathExtension.lowercased()) else { return nil }
+                return url
+            } ?? []).sorted { $0.lastPathComponent < $1.lastPathComponent }
+            if files.isEmpty {
+                if let i = jobs.firstIndex(where: { $0.id == id }) { jobs[i].error = "O Instaloader não encontrou Stories disponíveis para esse perfil." }
+                finish(id, code: 1)
+                try? fileManager.removeItem(atPath: temporaryDirectory)
+                return
+            }
+            var copied: [URL] = []
+            guard let i = jobs.firstIndex(where: { $0.id == id }) else { return }
+            let destination = URL(fileURLWithPath: jobs[i].directory, isDirectory: true)
+            for source in files {
+                var target = destination.appendingPathComponent(source.lastPathComponent)
+                if fileManager.fileExists(atPath: target.path) {
+                    target = destination.appendingPathComponent("\(source.deletingPathExtension().lastPathComponent)-\(UUID().uuidString.prefix(6)).\(source.pathExtension)")
+                }
+                do { try fileManager.moveItem(at: source, to: target); copied.append(target) } catch { }
+            }
+            if let first = copied.first {
+                jobs[i].file = first.path
+                jobs[i].title = copied.count == 1 ? first.deletingPathExtension().lastPathComponent : "Instagram — \(copied.count) arquivos"
+            }
+        }
+        try? FileManager.default.removeItem(atPath: temporaryDirectory)
+        finish(id, code: code)
+    }
+
     private func consume(_ line: String, id: UUID) {
         guard let i = jobs.firstIndex(where: { $0.id == id }) else { return }
+        if !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, jobs[i].status == "Preparando" {
+            jobs[i].status = "Baixando"
+        }
         if line.hasPrefix("STUDIO_TITLE:") { jobs[i].title = String(line.dropFirst(13)) }
         if line.hasPrefix("STUDIO_FILE:") { jobs[i].file = String(line.dropFirst(12)) }
         if line.hasPrefix("STUDIO_PROGRESS:"), jobs[i].status != "Cancelando…" {

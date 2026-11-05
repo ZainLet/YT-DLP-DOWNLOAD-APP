@@ -31,11 +31,15 @@ fetch https://raw.githubusercontent.com/denoland/deno/v2.9.8/LICENSE.md Deno-LIC
 fetch https://raw.githubusercontent.com/denoland/deno/v2.9.8/cli/tsc/dts/node/LICENSE Deno-Node-LICENSE.txt
 fetch https://raw.githubusercontent.com/v8/v8/15.0.245.2/LICENSE Deno-V8-LICENSE.txt
 fetch https://raw.githubusercontent.com/microsoft/TypeScript/v6.0.3/LICENSE.txt Deno-TypeScript-LICENSE.txt
+fetch https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.11.18%2B20261026-aarch64-apple-darwin-install_only_stripped.tar.gz cpython-3.11.18-aarch64-apple-darwin.tar.gz
+fetch https://raw.githubusercontent.com/python/cpython/3.11/LICENSE Python-LICENSE.txt
+fetch https://raw.githubusercontent.com/instaloader/instaloader/v4.16/LICENSE Instaloader-LICENSE.txt
+fetch https://raw.githubusercontent.com/borisbabic/browser_cookie3/master/LICENSE browser-cookie3-LICENSE.txt
 
 # The lock covers every downloaded source and executable. Bootstrap it only once
 # with --write-lock, then commit and verify it on every subsequent build.
 if [ "${1:-}" = "--write-lock" ]; then
-  (cd "$SOURCES" && shasum -a 256 *.tar.* yt-dlp_macos yt-dlp-SHA2-256SUMS yt-dlp-THIRD_PARTY_LICENSES.txt Deno-*.txt *.zip) > "$BASE/runtime-downloads.sha256"
+  (cd "$SOURCES" && shasum -a 256 *.tar.* yt-dlp_macos yt-dlp-SHA2-256SUMS yt-dlp-THIRD_PARTY_LICENSES.txt Deno-*.txt Python-LICENSE.txt Instaloader-LICENSE.txt browser-cookie3-LICENSE.txt *.zip) > "$BASE/runtime-downloads.sha256"
 else
   (cd "$SOURCES" && shasum -a 256 -c "$ROOT/packaging/runtime-downloads.sha256")
 fi
@@ -86,6 +90,18 @@ tar -xzf "$SOURCES/yt-dlp-2026.10.26.tar.gz" -C "$BASE"
 cp "$BASE/yt-dlp/LICENSE" "$BASE/licenses/yt-dlp-LICENSE.txt"
 cp "$SOURCES/yt-dlp-THIRD_PARTY_LICENSES.txt" "$BASE/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt"
 cp "$SOURCES/"Deno-*.txt "$BASE/licenses/"
+cp "$SOURCES/Python-LICENSE.txt" "$BASE/licenses/Python-LICENSE.txt"
+cp "$SOURCES/Instaloader-LICENSE.txt" "$BASE/licenses/Instaloader-LICENSE.txt"
+cp "$SOURCES/browser-cookie3-LICENSE.txt" "$BASE/licenses/browser-cookie3-LICENSE.txt"
+if [ ! -f "$BASE/instaloader.done" ]; then
+  rm -rf "$BASE/python"
+  mkdir -p "$BASE/python"
+  tar -xzf "$SOURCES/cpython-3.11.18-aarch64-apple-darwin.tar.gz" -C "$BASE"
+  "$BASE/python/bin/python3" -m pip install --disable-pip-version-check --no-compile --no-cache-dir \
+    --only-binary=:all: --target "$BASE/python/lib/python3.11/site-packages" \
+    -r "$ROOT/packaging/instaloader-requirements.txt"
+  touch "$BASE/instaloader.done"
+fi
 "$BASE/bin/ffmpeg" -buildconf 2>&1 | sed "s|$ROOT|<BUILD_ROOT>|g" > "$BASE/licenses/FFmpeg-BUILD-CONFIG.txt"
 for TOOL in yt-dlp ffmpeg ffprobe deno; do
   codesign --force --sign - "$BASE/bin/$TOOL"

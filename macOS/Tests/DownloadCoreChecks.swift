@@ -26,6 +26,9 @@ import Foundation
         options.cookieBrowser = .safari
         let instagramArgs = DownloadCommand.arguments(url: "https://www.instagram.com/stories/example/", options: options)
         check(instagramArgs.contains("--cookies-from-browser") && instagramArgs.contains("safari"), "Browser cookies")
+        check({ if case .stories(let username) = InstagramCommand.target(for: "https://www.instagram.com/stories/example/123/") { return username == "example" }; return false }(), "Instagram story target")
+        let storyArgs = InstagramCommand.arguments(url: "https://www.instagram.com/stories/example/123/", options: options, outputDirectory: "/tmp/instagram")!
+        check(storyArgs.contains("--load-cookies") && storyArgs.contains("--stories") && storyArgs.contains("example"), "Instaloader story command")
         let videoOnly = SourceFormat.parse(["format_id": "137", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 1080])!
         check(videoOnly.selector == "137+ba", "Video-only format gets audio")
         check(SourceFormat.parse(["format_id": "sb", "vcodec": "none", "acodec": "none"]) == nil, "Storyboards are excluded")

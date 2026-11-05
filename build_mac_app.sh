@@ -24,9 +24,14 @@ if [ "${STUDIO_BUNDLE_TOOLS:-0}" = "1" ]; then
   test -x "$ROOT/.build/runtime/bin/yt-dlp"
   mkdir -p "$CONTENTS/Resources/Tools" "$CONTENTS/Resources/ThirdParty"
   cp "$ROOT/.build/runtime/bin/"* "$CONTENTS/Resources/Tools/"
+  test -x "$ROOT/.build/runtime/python/bin/python3"
+  ditto "$ROOT/.build/runtime/python" "$CONTENTS/Resources/Python"
+  find "$CONTENTS/Resources/Python" -type d -name __pycache__ -prune -exec rm -rf {} +
   cp "$ROOT/.build/runtime/licenses/"* "$CONTENTS/Resources/ThirdParty/"
   cp "$ROOT/THIRD_PARTY_NOTICES.md" "$CONTENTS/Resources/ThirdParty/"
   for TOOL in "$CONTENTS/Resources/Tools/"*; do codesign --force --sign - "$TOOL"; done
+  codesign --force --sign - "$CONTENTS/Resources/Python/bin/python3"
+  find "$CONTENTS/Resources/Python" -type f -name '*.dylib' -exec codesign --force --sign - {} \;
 fi
 plutil -lint "$CONTENTS/Info.plist"
 codesign --force --sign - "$APP"
