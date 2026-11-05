@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#10131a" />
+    <meta name="description" content="YTDLP Studio — downloads simples para você." />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>YTDLP Studio</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#download" aria-label="YTDLP Studio, início">
+          <span class="brand-mark" aria-hidden="true">↓</span>
+          <span>YTDLP <em>Studio</em></span>
+        </a>
+        <nav class="nav-pills" aria-label="Navegação principal">
+          <button class="nav-pill is-active" data-view="download">Baixar</button>
+          <button class="nav-pill" data-view="activity">Atividade <span class="nav-count" id="active-count">0</span></button>
+          <button class="nav-pill" data-view="completed">Concluídos</button>
+        </nav>
+        <div class="connection-status"><span class="status-dot"></span><span>Privado</span></div>
+      </header>
+
+      <main class="content">
+        <section class="view is-visible" id="view-download" aria-labelledby="download-title">
+          <div class="hero-copy">
+            <p class="eyebrow">YTDLP Studio <span>para você</span></p>
+            <h1 id="download-title">Tudo pronto<br /><span>para baixar.</span></h1>
+            <p class="lede">Cole um link, escolha como salvar e deixe a fila cuidar do resto.</p>
+          </div>
+
+          <div class="composer-grid">
+            <section class="panel links-panel" aria-labelledby="links-title">
+              <div class="panel-heading">
+                <div><p class="section-kicker">01</p><h2 id="links-title">Seus links</h2></div>
+                <span class="link-count" id="link-count">0 links</span>
+              </div>
+              <label class="sr-only" for="links-input">Links para baixar, um por linha</label>
+              <textarea id="links-input" rows="7" placeholder="Cole os links aqui\n\nhttps://youtube.com/watch?v=…"></textarea>
+              <div class="input-footer">
+                <button class="text-button" id="paste-button" type="button">Colar links</button>
+                <button class="text-button" id="formats-button" type="button">Formatos do link <span>↗</span></button>
+              </div>
+              <p class="helper">Adicione vários links de uma vez. A fila cuida do resto.</p>
+            </section>
+
+            <section class="panel options-panel" aria-labelledby="options-title">
+              <div class="panel-heading"><div><p class="section-kicker">02</p><h2 id="options-title">Como salvar</h2></div></div>
+              <div class="segmented" role="group" aria-label="Tipo de mídia">
+                <button class="segment is-selected" data-kind="video" type="button">Vídeo</button>
+                <button class="segment" data-kind="audio" type="button">Áudio</button>
+              </div>
+              <div class="field-row">
+                <label for="format-select">Formato</label>
+                <select id="format-select"><option value="mp4">MP4</option><option value="webm">WebM</option><option value="mkv">MKV</option><option value="gif">GIF</option></select>
+              </div>
+              <div class="field-row" id="video-settings">
+                <label for="quality-select">Qualidade máxima</label>
+                <select id="quality-select"><option>Melhor disponível</option><option>2160p · 4K</option><option>1440p · 2K</option><option>1080p · Full HD</option><option>720p · HD</option></select>
+              </div>
+              <div class="field-row is-hidden" id="audio-settings">
+                <label for="audio-quality-select">Qualidade de áudio</label>
+                <select id="audio-quality-select"><option>Melhor disponível</option><option>320 kbps</option><option>192 kbps</option><option>128 kbps</option></select>
+              </div>
+              <details class="advanced-options">
+                <summary>Codecs e opções avançadas <span>＋</span></summary>
+                <div class="advanced-content">
+                  <div class="field-row"><label for="codec-select">Codec da fonte</label><select id="codec-select"><option>Qualquer codec</option><option>H.264 / AVC</option><option>VP9</option><option>AV1</option></select></div>
+                  <p class="helper">O vídeo é remuxado sem recodificar. Áudio pode ser convertido quando necessário.</p>
+                </div>
+              </details>
+              <div class="destination"><span class="destination-icon">⌄</span><div><small>Destino</small><strong>Downloads do iPad</strong></div><span class="destination-arrow">›</span></div>
+              <button class="primary-button" id="download-button" type="button"><span>Adicionar à fila</span><span class="button-arrow">↗</span></button>
+            </section>
+          </div>
+
+          <section class="recent-section" aria-labelledby="recent-title">
+            <div class="section-heading"><div><p class="section-kicker">03</p><h2 id="recent-title">Última atividade</h2></div><button class="text-button" data-view-target="activity" type="button">Ver tudo <span>→</span></button></div>
+            <div id="recent-list" class="job-list"></div>
+            <div id="recent-empty" class="empty-state"><span class="empty-icon">✦</span><div><strong>Sua fila começa aqui</strong><p>Os próximos downloads aparecem neste espaço.</p></div><span class="queue-note">Até 2 simultâneos</span></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-activity" aria-labelledby="activity-title">
+          <div class="page-heading"><p class="eyebrow">Acompanhe tudo</p><h1 id="activity-title">Cada download,<br /><span>no seu tempo.</span></h1><p class="lede">O que está baixando e o que vem a seguir.</p></div>
+          <div class="stats"><div><strong id="stat-active">0</strong><span>Baixando</span></div><div><strong id="stat-queued">0</strong><span>Na fila</span></div><div><strong id="stat-done">0</strong><span>Concluídos</span></div></div>
+          <div id="activity-list" class="job-list full-list"></div>
+          <div id="activity-empty" class="empty-large"><span>✦</span><h2>Tudo em dia</h2><p>Adicione novos links para começar sua próxima fila.</p><button class="secondary-button" data-view-target="download" type="button">Adicionar links</button></div>
+        </section>
+
+        <section class="view" id="view-completed" aria-labelledby="completed-title">
+          <div class="page-heading"><p class="eyebrow">Sua coleção</p><h1 id="completed-title">Prontos para<br /><span>dar play.</span></h1><p class="lede">Seus downloads finalizados, reunidos em um lugar.</p></div>
+          <div id="completed-list" class="job-list full-list"></div>
+          <div id="completed-empty" class="empty-large"><span>✦</span><h2>Sua coleção começa aqui</h2><p>Quando um download terminar, você vai encontrá-lo aqui.</p><button class="secondary-button" data-view-target="download" type="button">Adicionar links</button></div>
+        </section>
+      </main>
+      <footer class="footer"><span>YTDLP Studio · uso privado</span><span>Feito para ser simples.</span></footer>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
