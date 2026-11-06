@@ -42,7 +42,7 @@ async function prepareBatch() {
      files.push(new File([blob],j.fileName||('story-'+(i+1)+(j.detail.startsWith('MP4')?'.mp4':'.jpg')),{type:j.detail.startsWith('MP4')?'video/mp4':'image/jpeg'}));
    }
    if(!navigator.share||!navigator.canShare||!navigator.canShare({files}))throw Error('Este navegador não permite salvar vários arquivos juntos. Use Salvar em cada item.');
-   batch.files=files;$('#batch-button').textContent='Salvar todos';$('#batch-message').textContent=files.length+' arquivos prontos. Toque em Salvar todos e escolha Salvar em Arquivos.';
+   batch.files=files;$('#batch-button').textContent='Salvar na galeria';$('#batch-message').textContent=files.length+' arquivos prontos. Toque em Salvar na galeria e escolha Salvar vídeos ou Salvar imagens no menu do iPad.';
  } catch(e) {$('#batch-message').textContent=e instanceof TypeError?'Não foi possível receber os arquivos. Verifique a conexão e toque em Preparar arquivos novamente.':e.message||'Não foi possível conectar ao servidor. Tente novamente.';}
  finally {batch.preparing=false;$('#batch-button').disabled=false;}
 }
