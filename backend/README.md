@@ -12,4 +12,4 @@ Limites locais: até 900 consultas por mês UTC por armazenamento do servidor, 1
 
 Teste: `python -m unittest discover -s backend -v`. Para desenvolvimento na mesma origem, configure `WEBAPP_DIR` com o caminho absoluto de `webapp` e execute `uvicorn server:app` dentro de `backend`. A autenticação usa cookie Secure, portanto teste com HTTPS ou cliente de testes HTTPS.
 
-O Render Free pode demorar para iniciar após inatividade. Downloads e listas não sobrevivem ao reinício. O app macOS funciona de forma local e não depende deste backend.
+Downloads concluídos e seus arquivos temporários são removidos 24 horas após a conclusão. O Render Free pode demorar para iniciar após inatividade; downloads e listas podem desaparecer antes disso em reinícios ou deploys. O app macOS funciona de forma local e não depende deste backend.

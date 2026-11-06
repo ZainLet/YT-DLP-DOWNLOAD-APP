@@ -22,6 +22,7 @@ function renderJob(j) {
  return '<article class="job-card"><div class="job-main"><div class="job-title" title="'+esc(j.url)+'">'+esc(j.title)+'</div><div class="job-detail">'+esc(j.detail)+'</div>'+(['active','queued'].includes(j.status)?'<div class="job-progress"><span style="width:'+j.progress+'%"></span></div>':'')+(j.error?'<div class="job-detail">'+esc(j.error)+'</div>':'')+'</div><div class="job-side">'+action+'<div class="job-state">'+status+'</div></div></article>';
 }
 function render() {
+ state.jobs=state.jobs.filter(j=>j.status!=='done'||!j.finishedAt||Date.now()/1000-j.finishedAt<86400);
  const active=state.jobs.filter(j=>j.status==='active').length,queued=state.jobs.filter(j=>j.status==='queued').length,done=state.jobs.filter(j=>j.status==='done');
  $('#active-count').textContent=active+queued;$('#stat-active').textContent=active;$('#stat-queued').textContent=queued;$('#stat-done').textContent=done.length;const n=parseLinks().length;$('#link-count').textContent=n+(n===1?' link':' links');
  for(const [name,jobs] of [['recent',state.jobs.slice(0,3)],['activity',state.jobs],['completed',done]]) {$('[id="'+name+'-list"]').innerHTML=jobs.map(renderJob).join('');$('[id="'+name+'-empty"]').classList.toggle('is-hidden',jobs.length>0);}
@@ -70,4 +71,5 @@ $('#stories-select-all').addEventListener('click',()=>{if(!state.collection)retu
 $('#stories-download').addEventListener('click',downloadStories);
 $('#batch-button').addEventListener('click',prepareBatch);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollRealJobs();});
+setInterval(()=>{if(!document.hidden)render();},60000);
 render();initBackend();

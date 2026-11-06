@@ -26,6 +26,27 @@ def sample(story_id, video=False):
 
 
 class InstagramChecks(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_expire_after_24_hours_without_affecting_active_jobs(self):
+        now = 2000000000
+        old_id, fresh_id, active_id = 'a' * 32, 'b' * 32, 'c' * 32
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            for job_id in (old_id, fresh_id, active_id):
+                (base / job_id).mkdir()
+                (base / job_id / 'video.mp4').write_bytes(b'video')
+            records = {
+                old_id: {'status': 'done', 'finishedAt': now - 86400},
+                fresh_id: {'status': 'done', 'finishedAt': now - 86399},
+                active_id: {'status': 'active', 'finishedAt': now - 90000},
+            }
+            with patch.object(server, 'DATA_DIR', base), patch.object(server, 'jobs', records), patch.object(server, 'job_tasks', {}):
+                server.cleanup_completed(now)
+                self.assertNotIn(old_id, records)
+                self.assertFalse((base / old_id).exists())
+                self.assertTrue((base / fresh_id / 'video.mp4').exists())
+                self.assertTrue((base / active_id / 'video.mp4').exists())
+                self.assertEqual(set(records), {fresh_id, active_id})
+
     async def test_cache_quota_and_public_response(self):
         calls = []
         def handler(request):

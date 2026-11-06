@@ -4,6 +4,7 @@ import hmac
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import time
 import uuid
@@ -37,6 +38,50 @@ jobs: dict[str, dict[str, Any]] = {}
 job_tasks: dict[str, asyncio.Task] = {}
 job_slots = asyncio.Semaphore(2)
 instagram = InstagramService(os.environ.get("RAPIDAPI_KEY", ""), DATA_DIR)
+COMPLETED_RETENTION = 24 * 60 * 60
+
+
+def cleanup_completed(now: float | None = None) -> None:
+    cutoff = (time.time() if now is None else now) - COMPLETED_RETENTION
+    for job_id, job in list(jobs.items()):
+        if job.get("status") != "done" or not job.get("finishedAt") or job["finishedAt"] > cutoff:
+            continue
+        # Job folders are created with UUID hex IDs, never from user input.
+        if not re.fullmatch(r"[0-9a-f]{32}", job_id):
+            continue
+        directory = DATA_DIR / job_id
+        try:
+            if directory.is_symlink():
+                directory.unlink()
+            elif directory.exists():
+                shutil.rmtree(directory)
+        except OSError:
+            # Retain the record so a later cleanup can retry.
+            continue
+        jobs.pop(job_id, None)
+        job_tasks.pop(job_id, None)
+
+
+async def _cleanup_loop() -> None:
+    while True:
+        cleanup_completed()
+        await asyncio.sleep(60)
+
+
+@app.on_event("startup")
+async def start_cleanup() -> None:
+    app.state.cleanup_task = asyncio.create_task(_cleanup_loop())
+
+
+@app.on_event("shutdown")
+async def stop_cleanup() -> None:
+    task = getattr(app.state, "cleanup_task", None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 class LoginRequest(BaseModel):
@@ -167,6 +212,7 @@ async def session(ytdlp_session: str | None = Cookie(default=None)) -> dict[str,
 @app.get("/api/downloads")
 async def list_downloads(ytdlp_session: str | None = Cookie(default=None)) -> list[dict[str, Any]]:
     require_auth(ytdlp_session)
+    cleanup_completed()
     return [_job_view(job) for job in sorted(jobs.values(), key=lambda item: item["createdAt"], reverse=True)]
 
 
@@ -186,6 +232,7 @@ async def create_download(payload: DownloadRequest, ytdlp_session: str | None = 
 @app.get("/api/downloads/{job_id}")
 async def get_download(job_id: str, ytdlp_session: str | None = Cookie(default=None)) -> dict[str, Any]:
     require_auth(ytdlp_session)
+    cleanup_completed()
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Download not found")
     return _job_view(jobs[job_id])
@@ -194,6 +241,7 @@ async def get_download(job_id: str, ytdlp_session: str | None = Cookie(default=N
 @app.get("/api/downloads/{job_id}/file")
 async def download_file(job_id: str, ytdlp_session: str | None = Cookie(default=None)) -> FileResponse:
     require_auth(ytdlp_session)
+    cleanup_completed()
     job = jobs.get(job_id)
     if not job or job.get("status") != "done" or not job.get("path"):
         raise HTTPException(status_code=409, detail="File is not ready")
